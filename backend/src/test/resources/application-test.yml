@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/servico_ja_teste
+    username: servico_ja
+    password: servico_ja
+  flyway:
+    enabled: true
+  mail:
+    host: localhost
+    port: 25
+    username:
+    password:

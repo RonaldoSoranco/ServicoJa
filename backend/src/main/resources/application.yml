@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: servico-ja-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/servico_ja}
+    username: ${DB_USER:servico_ja}
+    password: ${DB_PASSWORD:servico_ja}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USER:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: always
+
+servico-ja:
+  jwt:
+    segredo: ${JWT_SECRET:dev-segredo-servico-ja-troque-em-producao-32-bytes-min}
+    expiracao-acesso-min: ${JWT_EXPIRACAO_ACESSO_MIN:60}
+    expiracao-refresh-dias: ${JWT_EXPIRACAO_REFRESH_DIAS:30}
+  asaas:
+    url: ${ASAAS_URL:https://sandbox.asaas.com}
+    api-key: ${ASAAS_API_KEY:}
+    webhook-segredo: ${ASAAS_WEBHOOK_SEGREDO:}
+    valor-mensal: ${ASAAS_VALOR_MENSAL:49.90}
+    valor-anual: ${ASAAS_VALOR_ANUAL:479.00}
+  app:
+    base-url: ${APP_BASE_URL:http://localhost:8080}
+    cidade-padrao: ${CIDADE_PADRAO:Marau}
+    uf-padrao: ${UF_PADRAO:RS}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
