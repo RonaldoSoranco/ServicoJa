@@ -19,13 +19,13 @@ public class FavoritoController {
     }
 
     @PostMapping("/empresas/{empresaId}")
-    public FavoritoDtos.MensagemResposta alternar(@PathVariable Long empresaId) {
-        return favoritoService.alternar(usuarioAtual.obter(), empresaId);
+    public FavoritoDtos.MensagemResposta favoritar(@PathVariable Long empresaId) {
+        return favoritoService.favoritar(usuarioAtual.obter(), empresaId);
     }
 
     @DeleteMapping("/empresas/{empresaId}")
     public FavoritoDtos.MensagemResposta remover(@PathVariable Long empresaId) {
-        return favoritoService.alternar(usuarioAtual.obter(), empresaId);
+        return favoritoService.desfavoritar(usuarioAtual.obter(), empresaId);
     }
 
     @GetMapping

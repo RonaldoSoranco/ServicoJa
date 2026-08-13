@@ -11,9 +11,12 @@ import com.servicoja.dominio.seguranca.TokenRefreshRepository;
 import com.servicoja.dominio.usuario.Perfil;
 import com.servicoja.dominio.usuario.Usuario;
 import com.servicoja.dominio.usuario.UsuarioRepository;
+import com.servicoja.infra.excecao.CredenciaisInvalidasException;
+import com.servicoja.infra.excecao.LimiteExcedidoException;
 import com.servicoja.infra.excecao.NegocioException;
 import com.servicoja.infra.excecao.RecursoNaoEncontradoException;
 import com.servicoja.infra.seguranca.LimitadorRequisicoes;
+import com.servicoja.infra.seguranca.TokenHash;
 import com.servicoja.infra.seguranca.UsuarioAtual;
 import com.servicoja.infra.servico.EmailService;
 import com.servicoja.seguranca.JwtService;
@@ -32,6 +35,7 @@ import java.util.UUID;
 public class AuthService {
 
     private static final SecureRandom ALEATORIO = new SecureRandom();
+    private static final String HASH_BCRYPT_DUMMY = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
     private final UsuarioRepository usuarioRepository;
     private final EmpresaRepository empresaRepository;
@@ -77,7 +81,8 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthDtos.TokenResposta cadastrarCliente(AuthDtos.CadastroClienteRequest requisicao) {
+    public AuthDtos.TokenResposta cadastrarCliente(AuthDtos.CadastroClienteRequest requisicao, String ip) {
+        limitarCadastro(ip);
         verificarEmailDisponivel(requisicao.email());
         Usuario usuario = new Usuario();
         usuario.setNome(requisicao.nome().trim());
@@ -90,7 +95,8 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthDtos.TokenResposta cadastrarEmpresa(AuthDtos.CadastroEmpresaRequest requisicao) {
+    public AuthDtos.TokenResposta cadastrarEmpresa(AuthDtos.CadastroEmpresaRequest requisicao, String ip) {
+        limitarCadastro(ip);
         verificarEmailDisponivel(requisicao.email());
 
         Usuario usuario = new Usuario();
@@ -98,6 +104,7 @@ public class AuthService {
         usuario.setEmail(requisicao.email().trim().toLowerCase());
         usuario.setSenha(codificador.encode(requisicao.senha()));
         usuario.setTelefone(requisicao.telefone());
+        usuario.setCpf(requisicao.cpf());
         usuario.setPerfil(Perfil.EMPRESA);
         usuarioRepository.save(usuario);
 
@@ -106,11 +113,9 @@ public class AuthService {
         empresa.setNome(requisicao.nomeEmpresa().trim());
         empresa.setCidade(requisicao.cidade() != null ? requisicao.cidade() : cidadePadrao);
         empresa.setUf(requisicao.uf() != null ? requisicao.uf().toUpperCase() : ufPadrao);
-        if (requisicao.categoriaId() != null) {
-            Categoria categoria = categoriaRepository.findById(requisicao.categoriaId())
-                    .orElseThrow(() -> new RecursoNaoEncontradoException("Categoria nao encontrada."));
-            empresa.setCategoria(categoria);
-        }
+        Categoria categoria = categoriaRepository.findById(requisicao.categoriaId())
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Categoria nao encontrada."));
+        empresa.setCategoria(categoria);
         empresaRepository.save(empresa);
 
         return gerarTokens(usuario);
@@ -118,19 +123,23 @@ public class AuthService {
 
     @Transactional
     public AuthDtos.TokenResposta login(AuthDtos.LoginRequest requisicao, String ip) {
-        String chaveLimite = "login:" + requisicao.email().trim().toLowerCase();
+        String email = requisicao.email().trim().toLowerCase();
+        String chaveLimite = "login:" + ip + ":" + email;
         if (!limitador.permitido(chaveLimite, 5, Duration.ofMinutes(1))) {
-            throw new NegocioException("Muitas tentativas de login. Aguarde 1 minuto e tente novamente.");
+            throw new LimiteExcedidoException("Muitas tentativas de login. Aguarde 1 minuto e tente novamente.");
         }
 
-        Usuario usuario = usuarioRepository.findByEmailIgnoreCase(requisicao.email().trim())
-                .orElseThrow(() -> new NegocioException("Credenciais invalidas."));
-
+        Usuario usuario = usuarioRepository.findByEmailIgnoreCase(email)
+                .orElse(null);
+        if (usuario == null) {
+            codificador.matches(requisicao.senha(), HASH_BCRYPT_DUMMY);
+            throw new CredenciaisInvalidasException("Credenciais invalidas.");
+        }
         if (!Boolean.TRUE.equals(usuario.getAtivo())) {
-            throw new NegocioException("Conta desativada. Entre em contato com o suporte.");
+            throw new CredenciaisInvalidasException("Credenciais invalidas.");
         }
         if (!codificador.matches(requisicao.senha(), usuario.getSenha())) {
-            throw new NegocioException("Credenciais invalidas.");
+            throw new CredenciaisInvalidasException("Credenciais invalidas.");
         }
 
         limitador.limpar(chaveLimite);
@@ -138,10 +147,28 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthDtos.TokenResposta renovarToken(AuthDtos.RefreshRequest requisicao) {
-        TokenRefresh token = tokenRefreshRepository.findByTokenAndRevogadoFalse(requisicao.tokenRefresh())
+    public AuthDtos.TokenResposta renovarToken(AuthDtos.RefreshRequest requisicao, String ip) {
+        String chaveLimite = "refresh:" + ip;
+        if (!limitador.permitido(chaveLimite, 20, Duration.ofMinutes(1))) {
+            throw new LimiteExcedidoException("Muitas solicitacoes de renovacao. Aguarde 1 minuto.");
+        }
+
+        if (!jwtService.tokenValido(requisicao.tokenRefresh())) {
+            throw new NegocioException("Token de atualizacao invalido ou revogado.");
+        }
+        Claims claims = jwtService.extrairClaims(requisicao.tokenRefresh());
+        if (!JwtService.TIPO_REFRESH.equals(claims.get("tipo", String.class))) {
+            throw new NegocioException("Token de atualizacao invalido ou revogado.");
+        }
+
+        String hash = TokenHash.de(requisicao.tokenRefresh());
+        TokenRefresh token = tokenRefreshRepository.findByToken(hash)
                 .orElseThrow(() -> new NegocioException("Token de atualizacao invalido ou revogado."));
 
+        if (Boolean.TRUE.equals(token.getRevogado())) {
+            revogarTodosRefreshTokens(token.getUsuario());
+            throw new NegocioException("Token de atualizacao invalido ou revogado.");
+        }
         if (token.getExpiraEm().isBefore(OffsetDateTime.now())) {
             throw new NegocioException("Token de atualizacao expirado.");
         }
@@ -151,14 +178,14 @@ public class AuthService {
 
         Usuario usuario = token.getUsuario();
         if (!Boolean.TRUE.equals(usuario.getAtivo())) {
-            throw new NegocioException("Conta desativada.");
+            throw new CredenciaisInvalidasException("Credenciais invalidas.");
         }
         return gerarTokens(usuario);
     }
 
     @Transactional
     public void sair(String tokenRefresh) {
-        tokenRefreshRepository.findByTokenAndRevogadoFalse(tokenRefresh)
+        tokenRefreshRepository.findByToken(TokenHash.de(tokenRefresh))
                 .ifPresent(token -> {
                     token.setRevogado(true);
                     tokenRefreshRepository.save(token);
@@ -166,11 +193,17 @@ public class AuthService {
     }
 
     @Transactional
-    public void recuperarSenha(AuthDtos.RecuperarSenhaRequest requisicao) {
+    public void recuperarSenha(AuthDtos.RecuperarSenhaRequest requisicao, String ip) {
+        String chaveLimite = "recuperar-senha:" + ip;
+        if (!limitador.permitido(chaveLimite, 3, Duration.ofMinutes(15))) {
+            throw new LimiteExcedidoException("Muitas solicitacoes. Aguarde 15 minutos e tente novamente.");
+        }
+
         usuarioRepository.findByEmailIgnoreCase(requisicao.email().trim())
                 .ifPresent(usuario -> {
                     String token = UUID.randomUUID().toString().replace("-", "") + gerarSufixoAleatorio();
-                    TokenRecuperacao registro = new TokenRecuperacao(usuario, token, OffsetDateTime.now().plusHours(2));
+                    revogarTokensRecuperacaoPendentes(usuario);
+                    TokenRecuperacao registro = new TokenRecuperacao(usuario, TokenHash.de(token), OffsetDateTime.now().plusHours(2));
                     tokenRecuperacaoRepository.save(registro);
                     String link = baseUrl + "/api/auth/redefinir-senha?token=" + token;
                     emailService.enviar(
@@ -183,8 +216,14 @@ public class AuthService {
     }
 
     @Transactional
-    public void redefinirSenha(AuthDtos.RedefinirSenhaRequest requisicao) {
-        TokenRecuperacao registro = tokenRecuperacaoRepository.findFirstByTokenAndUsadoFalse(requisicao.token())
+    public void redefinirSenha(AuthDtos.RedefinirSenhaRequest requisicao, String ip) {
+        String chaveLimite = "redefinir-senha:" + ip;
+        if (!limitador.permitido(chaveLimite, 5, Duration.ofMinutes(15))) {
+            throw new LimiteExcedidoException("Muitas tentativas. Aguarde 15 minutos e tente novamente.");
+        }
+
+        TokenRecuperacao registro = tokenRecuperacaoRepository
+                .findFirstByTokenAndUsadoFalse(TokenHash.de(requisicao.token()))
                 .orElseThrow(() -> new NegocioException("Token de recuperacao invalido ou ja utilizado."));
 
         if (registro.getExpiraEm().isBefore(OffsetDateTime.now())) {
@@ -197,6 +236,7 @@ public class AuthService {
         Usuario usuario = registro.getUsuario();
         usuario.setSenha(codificador.encode(requisicao.novaSenha()));
         usuarioRepository.save(usuario);
+        revogarTodosRefreshTokens(usuario);
     }
 
     @Transactional
@@ -205,8 +245,12 @@ public class AuthService {
         if (!codificador.matches(requisicao.senhaAtual(), usuario.getSenha())) {
             throw new NegocioException("Senha atual incorreta.");
         }
+        if (requisicao.senhaAtual().equals(requisicao.novaSenha())) {
+            throw new NegocioException("A nova senha deve ser diferente da senha atual.");
+        }
         usuario.setSenha(codificador.encode(requisicao.novaSenha()));
         usuarioRepository.save(usuario);
+        revogarTodosRefreshTokens(usuario);
     }
 
     @Transactional
@@ -228,18 +272,42 @@ public class AuthService {
         }
     }
 
+    private void limitarCadastro(String ip) {
+        if (!limitador.permitido("cadastro:" + ip, 5, Duration.ofMinutes(10))) {
+            throw new LimiteExcedidoException("Muitos cadastros neste intervalo. Aguarde 10 minutos.");
+        }
+    }
+
+    private void revogarTodosRefreshTokens(Usuario usuario) {
+        tokenRefreshRepository.findAllByUsuarioIdAndRevogadoFalse(usuario.getId())
+                .forEach(token -> {
+                    token.setRevogado(true);
+                    tokenRefreshRepository.save(token);
+                });
+    }
+
+    private void revogarTokensRecuperacaoPendentes(Usuario usuario) {
+        tokenRecuperacaoRepository.findAllByUsuarioIdAndUsadoFalse(usuario.getId())
+                .forEach(token -> {
+                    token.setUsado(true);
+                    tokenRecuperacaoRepository.save(token);
+                });
+    }
+
     private AuthDtos.TokenResposta gerarTokens(Usuario usuario) {
-        String tokenAcesso = jwtService.gerarTokenAcesso(usuario.getId(), usuario.getEmail(), usuario.getPerfil().name());
+        String tokenAcesso = jwtService.gerarTokenAcesso(usuario.getId(), usuario.getEmail(), usuario.getPerfil());
         String tokenRefresh = jwtService.gerarTokenRefresh(usuario.getId());
 
-        TokenRefresh registro = new TokenRefresh(usuario, tokenRefresh, OffsetDateTime.now().plusDays(30));
+        Claims claimsRefresh = jwtService.extrairClaims(tokenRefresh);
+        OffsetDateTime expiraEm = claimsRefresh.getExpiration().toInstant()
+                .atOffset(OffsetDateTime.now().getOffset());
+        TokenRefresh registro = new TokenRefresh(usuario, TokenHash.de(tokenRefresh), expiraEm);
         tokenRefreshRepository.save(registro);
 
-        Claims claims = jwtService.extrairClaims(tokenAcesso);
         return new AuthDtos.TokenResposta(
                 tokenAcesso,
                 tokenRefresh,
-                claims.getExpiration().toInstant().atOffset(OffsetDateTime.now().getOffset()),
+                expiraEm,
                 converter(usuario));
     }
 

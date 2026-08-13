@@ -9,6 +9,7 @@ import com.servicoja.dominio.notificacao.TipoNotificacao;
 import com.servicoja.dominio.usuario.Perfil;
 import com.servicoja.dominio.usuario.Usuario;
 import com.servicoja.infra.PageResposta;
+import com.servicoja.infra.excecao.LimiteExcedidoException;
 import com.servicoja.infra.excecao.NegocioException;
 import com.servicoja.infra.excecao.RecursoNaoEncontradoException;
 import com.servicoja.infra.seguranca.LimitadorRequisicoes;
@@ -49,11 +50,14 @@ public class AvaliacaoService {
             throw new NegocioException("Apenas clientes podem avaliar empresas.");
         }
         if (!limitador.permitido("avaliacao:" + usuario.getId(), 5, Duration.ofHours(1))) {
-            throw new NegocioException("Limite de avaliacoes atingido. Tente novamente mais tarde.");
+            throw new LimiteExcedidoException("Limite de avaliacoes atingido. Tente novamente mais tarde.");
         }
 
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa nao encontrada."));
+        if (!Boolean.TRUE.equals(empresa.getAprovada())) {
+            throw new NegocioException("A empresa precisa ser aprovada para receber avaliacoes.");
+        }
 
         if (empresa.getUsuario().getId().equals(usuario.getId())) {
             throw new NegocioException("Voce nao pode avaliar a propria empresa.");

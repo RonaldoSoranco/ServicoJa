@@ -56,7 +56,11 @@ public class SegurancaConfig {
                                     ErroResposta.de(403, "ACESSO_NEGADO", "Voce nao tem permissao para realizar esta acao."));
                         }))
                 .authorizeHttpRequests(requisicoes -> requisicoes
-                        .requestMatchers("/api/auth/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/cadastro/cliente", "/api/auth/cadastro/empresa",
+                                "/api/auth/login", "/api/auth/refresh", "/api/auth/recuperar-senha",
+                                "/api/auth/redefinir-senha").permitAll()
+                        .requestMatchers("/api/auth/**").authenticated()
                         .requestMatchers("/api/asaas/webhook").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categorias").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categorias/todas").hasRole("ADMIN")

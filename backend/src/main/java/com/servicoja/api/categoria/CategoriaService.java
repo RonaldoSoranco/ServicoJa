@@ -50,7 +50,12 @@ public class CategoriaService {
     @Transactional
     public CategoriaDtos.CategoriaResposta atualizar(Long id, CategoriaDtos.CategoriaRequest requisicao) {
         Categoria categoria = obter(id);
-        categoria.setNome(requisicao.nome().trim());
+        String nome = requisicao.nome().trim();
+        if (categoriaRepository.existsByNomeIgnoreCase(nome)
+                && !categoria.getNome().equalsIgnoreCase(nome)) {
+            throw new NegocioException("Ja existe uma categoria com este nome.");
+        }
+        categoria.setNome(nome);
         categoria.setDescricao(requisicao.descricao());
         categoria.setIcone(requisicao.icone());
         return converter(categoriaRepository.save(categoria));

@@ -33,8 +33,8 @@ public class Assinatura {
     private TipoAssinatura tipo;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private StatusAssinatura status = StatusAssinatura.ATIVA;
+    @Column(nullable = false, length = 30)
+    private StatusAssinatura status = StatusAssinatura.AGUARDANDO_PAGAMENTO;
 
     @Column(name = "inicio_em")
     private OffsetDateTime inicioEm;

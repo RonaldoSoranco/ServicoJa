@@ -2,7 +2,7 @@ package com.servicoja.infra.seguranca;
 
 import com.servicoja.dominio.usuario.Usuario;
 import com.servicoja.dominio.usuario.UsuarioRepository;
-import com.servicoja.infra.excecao.NegocioException;
+import com.servicoja.infra.excecao.NaoAutenticadoException;
 import com.servicoja.infra.excecao.RecursoNaoEncontradoException;
 import com.servicoja.seguranca.UsuarioPrincipal;
 import org.springframework.security.core.Authentication;
@@ -21,7 +21,7 @@ public class UsuarioAtual {
     public Long obterId() {
         Authentication autenticacao = SecurityContextHolder.getContext().getAuthentication();
         if (autenticacao == null || !(autenticacao.getPrincipal() instanceof UsuarioPrincipal principal)) {
-            throw new NegocioException("Autenticacao necessaria.");
+            throw new NaoAutenticadoException("Autenticacao necessaria.");
         }
         return principal.id();
     }

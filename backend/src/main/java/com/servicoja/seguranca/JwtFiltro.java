@@ -33,16 +33,20 @@ public class JwtFiltro extends OncePerRequestFilter {
                 && SecurityContextHolder.getContext().getAuthentication() == null) {
 
             String token = cabecalho.substring(7);
-            if (jwtService.tokenValido(token)) {
+            try {
                 Claims claims = jwtService.extrairClaims(token);
-                Long usuarioId = claims.get("usuarioId", Long.class);
+                Long usuarioId = claims.get("usuarioId") instanceof Number numero
+                        ? numero.longValue() : null;
                 String perfil = claims.get("perfil", String.class);
-                String email = claims.getSubject();
-
-                UsuarioPrincipal principal = new UsuarioPrincipal(usuarioId, email, perfil);
-                var autenticacao = UsernamePasswordAuthenticationToken.authenticated(
-                        principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + perfil)));
-                SecurityContextHolder.getContext().setAuthentication(autenticacao);
+                if (JwtService.TIPO_ACESSO.equals(claims.get("tipo", String.class))
+                        && usuarioId != null && perfil != null) {
+                    UsuarioPrincipal principal = new UsuarioPrincipal(usuarioId, claims.getSubject(), perfil);
+                    var autenticacao = UsernamePasswordAuthenticationToken.authenticated(
+                            principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + perfil)));
+                    SecurityContextHolder.getContext().setAuthentication(autenticacao);
+                }
+            } catch (Exception ex) {
+                SecurityContextHolder.clearContext();
             }
         }
         chain.doFilter(request, response);

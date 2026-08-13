@@ -3,6 +3,8 @@ package com.servicoja.api.empresa;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -16,19 +18,20 @@ public final class EmpresaDtos {
 
     public record EmpresaRequest(
             @NotBlank(message = "Informe o nome da empresa.") @Size(max = 150) String nome,
-            Long categoriaId,
+            @NotNull(message = "Informe a categoria.") Long categoriaId,
             @Size(max = 255) String descricaoCurta,
             String descricaoCompleta,
             @Size(max = 500) String logoUrl,
-            @Size(max = 20) String telefone,
-            @Size(max = 20) String whatsapp,
-            @Size(max = 180) String emailContato,
+            @Size(max = 20) @Pattern(regexp = "^$|^[0-9+()\\s-]*$", message = "Telefone invalido.") String telefone,
+            @Size(max = 20) @Pattern(regexp = "^$|^[0-9+()\\s-]*$", message = "Whatsapp invalido.") String whatsapp,
+            @Size(max = 180) @jakarta.validation.constraints.Email String emailContato,
             @Size(max = 9) String cep,
             @Size(max = 255) String endereco,
             @Size(max = 10) String numero,
             @Size(max = 100) String bairro,
             @NotBlank(message = "Informe a cidade.") @Size(max = 100) String cidade,
-            @NotBlank(message = "Informe o estado.") @Size(min = 2, max = 2) String uf,
+            @NotBlank(message = "Informe o estado.")
+            @Size(min = 2, max = 2) @Pattern(regexp = "[A-Z]{2}", message = "UF deve ter 2 letras.") String uf,
             @DecimalMin(value = "-90.0") @DecimalMax(value = "90.0") BigDecimal latitude,
             @DecimalMin(value = "-180.0") @DecimalMax(value = "180.0") BigDecimal longitude,
             String horarioFuncionamento,

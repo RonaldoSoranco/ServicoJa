@@ -2,6 +2,7 @@ package com.servicoja.api.auth;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -11,6 +12,8 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Autenticacao", description = "Cadastro, login, recuperacao de senha e tokens")
 public class AuthController {
 
+    private static final String CACHE_CONTROL_NO_STORE = "no-store";
+
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
@@ -19,24 +22,32 @@ public class AuthController {
 
     @PostMapping("/cadastro/cliente")
     @ResponseStatus(HttpStatus.CREATED)
-    public AuthDtos.TokenResposta cadastrarCliente(@Valid @RequestBody AuthDtos.CadastroClienteRequest requisicao) {
-        return authService.cadastrarCliente(requisicao);
+    public AuthDtos.TokenResposta cadastrarCliente(@Valid @RequestBody AuthDtos.CadastroClienteRequest requisicao,
+                                                   HttpServletRequest request, HttpServletResponse response) {
+        bloquearCache(response);
+        return authService.cadastrarCliente(requisicao, request.getRemoteAddr());
     }
 
     @PostMapping("/cadastro/empresa")
     @ResponseStatus(HttpStatus.CREATED)
-    public AuthDtos.TokenResposta cadastrarEmpresa(@Valid @RequestBody AuthDtos.CadastroEmpresaRequest requisicao) {
-        return authService.cadastrarEmpresa(requisicao);
+    public AuthDtos.TokenResposta cadastrarEmpresa(@Valid @RequestBody AuthDtos.CadastroEmpresaRequest requisicao,
+                                                   HttpServletRequest request, HttpServletResponse response) {
+        bloquearCache(response);
+        return authService.cadastrarEmpresa(requisicao, request.getRemoteAddr());
     }
 
     @PostMapping("/login")
-    public AuthDtos.TokenResposta login(@Valid @RequestBody AuthDtos.LoginRequest requisicao, HttpServletRequest request) {
+    public AuthDtos.TokenResposta login(@Valid @RequestBody AuthDtos.LoginRequest requisicao,
+                                        HttpServletRequest request, HttpServletResponse response) {
+        bloquearCache(response);
         return authService.login(requisicao, request.getRemoteAddr());
     }
 
     @PostMapping("/refresh")
-    public AuthDtos.TokenResposta renovarToken(@Valid @RequestBody AuthDtos.RefreshRequest requisicao) {
-        return authService.renovarToken(requisicao);
+    public AuthDtos.TokenResposta renovarToken(@Valid @RequestBody AuthDtos.RefreshRequest requisicao,
+                                               HttpServletRequest request, HttpServletResponse response) {
+        bloquearCache(response);
+        return authService.renovarToken(requisicao, request.getRemoteAddr());
     }
 
     @PostMapping("/logout")
@@ -46,14 +57,16 @@ public class AuthController {
     }
 
     @PostMapping("/recuperar-senha")
-    public AuthDtos.MensagemResposta recuperarSenha(@Valid @RequestBody AuthDtos.RecuperarSenhaRequest requisicao) {
-        authService.recuperarSenha(requisicao);
+    public AuthDtos.MensagemResposta recuperarSenha(@Valid @RequestBody AuthDtos.RecuperarSenhaRequest requisicao,
+                                                    HttpServletRequest request) {
+        authService.recuperarSenha(requisicao, request.getRemoteAddr());
         return new AuthDtos.MensagemResposta("Se o e-mail estiver cadastrado, enviaremos as instrucoes.");
     }
 
     @PostMapping("/redefinir-senha")
-    public AuthDtos.MensagemResposta redefinirSenha(@Valid @RequestBody AuthDtos.RedefinirSenhaRequest requisicao) {
-        authService.redefinirSenha(requisicao);
+    public AuthDtos.MensagemResposta redefinirSenha(@Valid @RequestBody AuthDtos.RedefinirSenhaRequest requisicao,
+                                                    HttpServletRequest request) {
+        authService.redefinirSenha(requisicao, request.getRemoteAddr());
         return new AuthDtos.MensagemResposta("Senha redefinida com sucesso.");
     }
 
@@ -71,5 +84,9 @@ public class AuthController {
     @GetMapping("/me")
     public AuthDtos.UsuarioResposta obterUsuarioAtual() {
         return authService.obterUsuarioAtual();
+    }
+
+    private void bloquearCache(HttpServletResponse response) {
+        response.setHeader("Cache-Control", CACHE_CONTROL_NO_STORE);
     }
 }

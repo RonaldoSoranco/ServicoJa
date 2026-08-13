@@ -62,6 +62,9 @@ public class EmpresaService {
     @Transactional(readOnly = true)
     public EmpresaDtos.EmpresaResposta detalhar(Long id) {
         Empresa empresa = obter(id);
+        if (!Boolean.TRUE.equals(empresa.getAprovada())) {
+            throw new RecursoNaoEncontradoException("Empresa nao encontrada.");
+        }
         return converterCompleto(empresa);
     }
 
@@ -93,9 +96,6 @@ public class EmpresaService {
         empresa.setUsuario(usuario);
         empresa.setCategoria(categoria);
         aplicarDados(empresa, requisicao);
-        if (!empresa.isPerfilCompleto()) {
-            limparCamposPremium(empresa);
-        }
         empresa.setAprovada(false);
         empresa.setDestaque(false);
         empresaRepository.save(empresa);
@@ -114,9 +114,13 @@ public class EmpresaService {
                     .orElseThrow(() -> new RecursoNaoEncontradoException("Categoria nao encontrada."));
             empresa.setCategoria(categoria);
         }
+        boolean estavaAprovada = Boolean.TRUE.equals(empresa.getAprovada());
         aplicarDados(empresa, requisicao);
-        if (!empresa.isPerfilCompleto()) {
-            limparCamposPremium(empresa);
+        if (estavaAprovada) {
+            empresa.setAprovada(false);
+            empresa.setDestaque(false);
+            notificarAdmins("Empresa editada, nova aprovacao necessaria",
+                    "A empresa \"" + empresa.getNome() + "\" foi editada e aguarda nova aprovacao.");
         }
         return converterCompleto(empresaRepository.save(empresa));
     }
@@ -183,6 +187,9 @@ public class EmpresaService {
         Empresa empresa = obter(id);
         verificarProprietario(empresa, usuario);
         exigirPremium(empresa, "O destaque e exclusivo para empresas com Premium ativo.");
+        if (!Boolean.TRUE.equals(empresa.getAprovada())) {
+            throw new NegocioException("A empresa precisa ser aprovada para receber destaque.");
+        }
         empresa.setDestaque(true);
         empresaRepository.save(empresa);
         return new EmpresaDtos.MensagemResposta("Destaque ativado.");
@@ -249,14 +256,6 @@ public class EmpresaService {
         empresa.setHorarioFuncionamento(r.horarioFuncionamento());
         empresa.setRedesSociais(r.redesSociais());
         empresa.setSite(r.site());
-    }
-
-    private void limparCamposPremium(Empresa empresa) {
-        empresa.setDescricaoCompleta(null);
-        empresa.setHorarioFuncionamento(null);
-        empresa.setRedesSociais(null);
-        empresa.setSite(null);
-        empresa.setDestaque(false);
     }
 
     private void notificarAdmins(String titulo, String mensagem) {

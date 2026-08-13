@@ -31,7 +31,8 @@ class AuthIntegracaoTest {
     void cadastroClienteGeraTokensDeAcesso() {
         AuthDtos.TokenResposta resposta = authService.cadastrarCliente(
                 new AuthDtos.CadastroClienteRequest(
-                        "Maria Silva", "maria@teste.com", "senha12345", "(54) 99999-0001"));
+                        "Maria Silva", "maria@teste.com", "senha12345", "(54) 99999-0001"),
+                "127.0.0.1");
 
         assertThat(resposta.tokenAcesso()).isNotBlank();
         assertThat(resposta.tokenRefresh()).isNotBlank();
@@ -42,7 +43,8 @@ class AuthIntegracaoTest {
     void loginComCredenciaisValidasRetornaToken() {
         authService.cadastrarCliente(
                 new AuthDtos.CadastroClienteRequest(
-                        "Joao Teste", "joao@teste.com", "senha12345", null));
+                        "Joao Teste", "joao@teste.com", "senha12345", null),
+                "127.0.0.1");
 
         AuthDtos.TokenResposta resposta = authService.login(
                 new AuthDtos.LoginRequest("joao@teste.com", "senha12345"), "127.0.0.1");
@@ -54,7 +56,8 @@ class AuthIntegracaoTest {
     void loginComSenhaInvalidaFalha() {
         authService.cadastrarCliente(
                 new AuthDtos.CadastroClienteRequest(
-                        "Joao Teste", "joao2@teste.com", "senha12345", null));
+                        "Joao Teste", "joao2@teste.com", "senha12345", null),
+                "127.0.0.1");
 
         assertThatThrownBy(() -> authService.login(
                 new AuthDtos.LoginRequest("joao2@teste.com", "senhaErrada"), "127.0.0.1"))
@@ -66,9 +69,9 @@ class AuthIntegracaoTest {
     void emailDuplicadoNaoPodeCadastrarDuasVezes() {
         var cadastro = new AuthDtos.CadastroClienteRequest(
                 "Ana Teste", "ana@teste.com", "senha12345", null);
-        authService.cadastrarCliente(cadastro);
+        authService.cadastrarCliente(cadastro, "127.0.0.1");
 
-        assertThatThrownBy(() -> authService.cadastrarCliente(cadastro))
+        assertThatThrownBy(() -> authService.cadastrarCliente(cadastro, "127.0.0.1"))
                 .isInstanceOf(NegocioException.class)
                 .hasMessageContaining("Ja existe uma conta");
     }
@@ -77,9 +80,10 @@ class AuthIntegracaoTest {
     void recuperarSenhaCriaTokenDeRecuperacao() {
         authService.cadastrarCliente(
                 new AuthDtos.CadastroClienteRequest(
-                        "Recupera Teste", "recupera@teste.com", "senha12345", null));
+                        "Recupera Teste", "recupera@teste.com", "senha12345", null),
+                "127.0.0.1");
 
-        authService.recuperarSenha(new AuthDtos.RecuperarSenhaRequest("recupera@teste.com"));
+        authService.recuperarSenha(new AuthDtos.RecuperarSenhaRequest("recupera@teste.com"), "127.0.0.1");
 
         assertThat(tokenRecuperacaoRepository.findAll())
                 .anyMatch(token -> token.getUsuario().getEmail().equals("recupera@teste.com"));

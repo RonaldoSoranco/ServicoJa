@@ -33,6 +33,9 @@ public class Usuario {
     @Column(length = 20)
     private String telefone;
 
+    @Column(length = 14)
+    private String cpf;
+
     @Column(name = "asaas_cliente_id", length = 100)
     private String asaasClienteId;
 

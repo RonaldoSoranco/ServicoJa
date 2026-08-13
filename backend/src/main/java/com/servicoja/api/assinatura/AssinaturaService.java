@@ -27,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 @Service
 public class AssinaturaService {
@@ -71,8 +72,12 @@ public class AssinaturaService {
         if (!empresa.getUsuario().getId().equals(usuario.getId())) {
             throw new NegocioException("Voce nao pode assinar a assinatura desta empresa.");
         }
-        if (assinaturaRepository.existsByEmpresaIdAndStatus(empresa.getId(), StatusAssinatura.ATIVA)) {
-            throw new NegocioException("Esta empresa ja possui uma assinatura Premium ativa.");
+        if (!Boolean.TRUE.equals(empresa.getAprovada())) {
+            throw new NegocioException("A empresa precisa ser aprovada antes de contratar o Premium.");
+        }
+        if (assinaturaRepository.existsByEmpresaIdAndStatusIn(empresa.getId(),
+                List.of(StatusAssinatura.ATIVA, StatusAssinatura.AGUARDANDO_PAGAMENTO))) {
+            throw new NegocioException("Esta empresa ja possui uma assinatura Premium ativa ou pendente de pagamento.");
         }
 
         TipoAssinatura tipo = requisicao.tipo();
@@ -93,15 +98,14 @@ public class AssinaturaService {
                         "Pagamento da assinatura Premium - Servico Ja"));
 
         OffsetDateTime agora = OffsetDateTime.now();
-        OffsetDateTime fim = tipo == TipoAssinatura.ANUAL ? agora.plusYears(1) : agora.plusMonths(1);
 
         Assinatura assinatura = new Assinatura();
         assinatura.setUsuario(usuario);
         assinatura.setEmpresa(empresa);
         assinatura.setTipo(tipo);
-        assinatura.setStatus(StatusAssinatura.ATIVA);
+        assinatura.setStatus(StatusAssinatura.AGUARDANDO_PAGAMENTO);
         assinatura.setInicioEm(agora);
-        assinatura.setFimEm(fim);
+        assinatura.setFimEm(null);
         assinatura.setAsaasAssinaturaId(assinaturaAsaas.id());
         assinaturaRepository.save(assinatura);
 
@@ -135,21 +139,22 @@ public class AssinaturaService {
             throw new NegocioException("Esta assinatura nao esta ativa.");
         }
 
+        if (assinatura.getAsaasAssinaturaId() != null) {
+            asaasCliente.cancelarAssinatura(assinatura.getAsaasAssinaturaId());
+        }
         desativarPremium(assinatura, StatusAssinatura.CANCELADA,
                 "Sua assinatura Premium foi cancelada. O destaque da empresa foi removido imediatamente.");
-
-        if (assinatura.getAsaasAssinaturaId() != null) {
-            try {
-                asaasCliente.cancelarAssinatura(assinatura.getAsaasAssinaturaId());
-            } catch (Exception ignorada) {
-                // O cancelamento local ja ocorreu; a falha no gateway sera tratada pelo webhook.
-            }
-        }
         return new AssinaturaDtos.MensagemResposta("Assinatura cancelada. O destaque da empresa foi removido imediatamente.");
     }
 
     @Transactional
     public AssinaturaDtos.AssinaturaResposta obterAssinaturaAtiva(Usuario usuario, Long empresaId) {
+        Empresa empresa = empresaRepository.findById(empresaId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa nao encontrada."));
+        if (usuario.getPerfil() != Perfil.ADMIN
+                && !empresa.getUsuario().getId().equals(usuario.getId())) {
+            throw new NegocioException("Voce nao pode consultar a assinatura desta empresa.");
+        }
         return assinaturaRepository.findFirstByEmpresaIdAndStatusOrderByIdDesc(empresaId, StatusAssinatura.ATIVA)
                 .map(assinatura -> converter(assinatura,
                         pagamentoRepository.findByAssinaturaId(assinatura.getId()).orElse(null),
@@ -158,7 +163,7 @@ public class AssinaturaService {
     }
 
     @Transactional
-    public void processarWebhook(String corpo, String assinaturaAsaas) {
+    public void processarWebhook(String corpo) {
         AsaasDtos.WebhookPayload payload;
         try {
             payload = objectMapper.readValue(corpo, AsaasDtos.WebhookPayload.class);
@@ -188,6 +193,9 @@ public class AssinaturaService {
             return;
         }
         pagamentoRepository.findByAsaasPagamentoId(payload.payment().id()).ifPresent(pagamento -> {
+            if (pagamento.getStatus() == StatusPagamento.PAGO) {
+                return;
+            }
             pagamento.setStatus(StatusPagamento.PAGO);
             pagamento.setPagoEm(OffsetDateTime.now());
             pagamentoRepository.save(pagamento);
@@ -205,8 +213,17 @@ public class AssinaturaService {
             return;
         }
         pagamentoRepository.findByAsaasPagamentoId(payload.payment().id()).ifPresent(pagamento -> {
-            pagamento.setStatus(StatusPagamento.PENDENTE);
+            pagamento.setStatus(StatusPagamento.ATRASADO);
             pagamentoRepository.save(pagamento);
+            if (pagamento.getAssinatura() != null) {
+                Assinatura assinatura = pagamento.getAssinatura();
+                if (assinatura.getStatus() == StatusAssinatura.ATIVA) {
+                    assinatura.setStatus(StatusAssinatura.ATRASADA);
+                    assinaturaRepository.save(assinatura);
+                    desativarPremium(assinatura, StatusAssinatura.ATRASADA,
+                            "O pagamento da sua assinatura esta atrasado. O Premium foi desativado.");
+                }
+            }
         });
     }
 
@@ -252,7 +269,10 @@ public class AssinaturaService {
         Empresa empresa = assinatura.getEmpresa();
         OffsetDateTime agora = OffsetDateTime.now();
         OffsetDateTime fim = assinatura.getTipo() == TipoAssinatura.ANUAL ? agora.plusYears(1) : agora.plusMonths(1);
+        assinatura.setStatus(StatusAssinatura.ATIVA);
+        assinatura.setInicioEm(agora);
         assinatura.setFimEm(fim);
+        assinaturaRepository.save(assinatura);
         empresa.setPremiumAtivo(true);
         empresa.setPremiumAte(fim);
         empresaRepository.save(empresa);
@@ -277,11 +297,14 @@ public class AssinaturaService {
         if (usuario.getAsaasClienteId() != null) {
             return usuario.getAsaasClienteId();
         }
+        String cpf = usuario.getCpf() != null && !usuario.getCpf().isBlank()
+                ? usuario.getCpf()
+                : cpfFakeParaTeste();
         AsaasDtos.ClienteResponse cliente = asaasCliente.criarCliente(
                 new AsaasDtos.CriarClienteRequest(
                         usuario.getNome(),
                         usuario.getEmail(),
-                        cpfFakeParaTeste()));
+                        cpf));
         usuario.setAsaasClienteId(cliente.id());
         usuarioRepository.save(usuario);
         return cliente.id();

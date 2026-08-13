@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
+@Profile("!prod")
 public class DadosIniciaisSeed implements CommandLineRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DadosIniciaisSeed.class);
@@ -65,7 +67,7 @@ public class DadosIniciaisSeed implements CommandLineRunner {
         admin.setSenha(codificador.encode("admin1234"));
         admin.setPerfil(Perfil.ADMIN);
         usuarioRepository.save(admin);
-        LOGGER.info("Administrador padrao criado (admin@servicoja.com.br / admin1234).");
+        LOGGER.info("Administrador padrao criado (admin@servicoja.com.br).");
     }
 
     private Map<String, Categoria> criarCategorias() {
@@ -83,20 +85,20 @@ public class DadosIniciaisSeed implements CommandLineRunner {
                 new String[]{"Pintor", "Pintura interna e externa", "pintura"});
 
         for (String[] dado : dados) {
-            Categoria categoria = categoriaRepository
-                    .findAllByAtivaTrueOrderByNomeAsc().stream()
-                    .filter(c -> c.getNome().equalsIgnoreCase(dado[0]))
-                    .findFirst()
-                    .orElseGet(() -> {
-                        Categoria nova = new Categoria();
-                        nova.setNome(dado[0]);
-                        nova.setDescricao(dado[1]);
-                        nova.setIcone(dado[2]);
-                        return categoriaRepository.save(nova);
-                    });
+            Categoria categoria = categoriaRepository.existsByNomeIgnoreCase(dado[0])
+                    ? categoriaRepository.findFirstByNomeIgnoreCase(dado[0])
+                    : categoriaRepository.save(novaCategoria(dado));
             categorias.put(dado[0], categoria);
         }
         return categorias;
+    }
+
+    private Categoria novaCategoria(String[] dado) {
+        Categoria nova = new Categoria();
+        nova.setNome(dado[0]);
+        nova.setDescricao(dado[1]);
+        nova.setIcone(dado[2]);
+        return nova;
     }
 
     private void criarEmpresasExemplo(Map<String, Categoria> categorias) {

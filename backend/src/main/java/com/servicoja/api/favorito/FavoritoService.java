@@ -6,12 +6,11 @@ import com.servicoja.dominio.favorito.Favorito;
 import com.servicoja.dominio.favorito.FavoritoRepository;
 import com.servicoja.dominio.usuario.Usuario;
 import com.servicoja.infra.PageResposta;
+import com.servicoja.infra.excecao.NegocioException;
 import com.servicoja.infra.excecao.RecursoNaoEncontradoException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
 
 @Service
 public class FavoritoService {
@@ -25,19 +24,27 @@ public class FavoritoService {
     }
 
     @Transactional
-    public FavoritoDtos.MensagemResposta alternar(Usuario usuario, Long empresaId) {
-        Optional<Favorito> existente = favoritoRepository.findByUsuarioIdAndEmpresaId(usuario.getId(), empresaId);
-        if (existente.isPresent()) {
-            favoritoRepository.delete(existente.get());
-            return new FavoritoDtos.MensagemResposta("Empresa removida dos favoritos.");
+    public FavoritoDtos.MensagemResposta favoritar(Usuario usuario, Long empresaId) {
+        if (favoritoRepository.existsByUsuarioIdAndEmpresaId(usuario.getId(), empresaId)) {
+            throw new NegocioException("Esta empresa ja esta nos seus favoritos.");
         }
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa nao encontrada."));
+        if (!Boolean.TRUE.equals(empresa.getAprovada())) {
+            throw new NegocioException("A empresa precisa ser aprovada para ser favoritada.");
+        }
         Favorito favorito = new Favorito();
         favorito.setUsuario(usuario);
         favorito.setEmpresa(empresa);
         favoritoRepository.save(favorito);
         return new FavoritoDtos.MensagemResposta("Empresa adicionada aos favoritos.");
+    }
+
+    @Transactional
+    public FavoritoDtos.MensagemResposta desfavoritar(Usuario usuario, Long empresaId) {
+        favoritoRepository.findByUsuarioIdAndEmpresaId(usuario.getId(), empresaId)
+                .ifPresent(favoritoRepository::delete);
+        return new FavoritoDtos.MensagemResposta("Empresa removida dos favoritos.");
     }
 
     @Transactional(readOnly = true)

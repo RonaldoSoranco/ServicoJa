@@ -1,5 +1,6 @@
 package com.servicoja.infra.seguranca;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -32,5 +33,24 @@ public class LimitadorRequisicoes {
 
     public void limpar(String chave) {
         requisicoes.remove(chave);
+    }
+
+    @Scheduled(fixedDelay = 600_000)
+    public void limparChavesAntigas() {
+        Instant agora = Instant.now();
+        requisicoes.entrySet().removeIf(entrada -> {
+            synchronized (entrada.getValue()) {
+                Deque<Instant> historico = entrada.getValue();
+                if (historico.isEmpty()) {
+                    return true;
+                }
+                boolean antiga = historico.peekLast().isBefore(agora.minus(Duration.ofHours(1)));
+                if (antiga) {
+                    return true;
+                }
+                historico.removeIf(instante -> instante.isBefore(agora.minus(Duration.ofHours(1))));
+                return false;
+            }
+        });
     }
 }

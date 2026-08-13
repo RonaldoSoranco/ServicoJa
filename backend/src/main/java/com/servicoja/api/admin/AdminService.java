@@ -36,7 +36,7 @@ public class AdminService {
     public AdminDtos.EstatisticasResposta estatisticas() {
         return new AdminDtos.EstatisticasResposta(
                 usuarioRepository.count(),
-                usuarioRepository.findByPerfil(Perfil.CLIENTE).size(),
+                usuarioRepository.countByPerfil(Perfil.CLIENTE),
                 empresaRepository.count(),
                 empresaRepository.countByPremiumAtivoTrue(),
                 empresaRepository.countByAprovadaFalse(),
