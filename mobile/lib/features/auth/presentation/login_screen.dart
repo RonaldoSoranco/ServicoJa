@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../perfil/presentation/esqueci_senha_screen.dart';
 import '../state/auth_controller.dart';
 import 'escolha_perfil_screen.dart';
 
@@ -80,7 +81,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       validator: (v) => (v == null || v.isEmpty) ? 'Informe sua senha.' : null,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: auth.carregando
+                            ? null
+                            : () =>
+                                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EsqueciSenhaScreen())),
+                        child: const Text('Esqueci minha senha'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     ElevatedButton(
                       onPressed: auth.carregando ? null : _entrar,
                       child: auth.carregando

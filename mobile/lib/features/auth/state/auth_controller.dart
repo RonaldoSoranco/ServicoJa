@@ -77,6 +77,18 @@ class AuthController extends ChangeNotifier {
     });
   }
 
+  Future<bool> atualizarPerfil({required String nome, String? telefone}) {
+    return _executar(() async {
+      usuario = await _repositorio.atualizarPerfil(nome: nome, telefone: telefone);
+    });
+  }
+
+  Future<bool> alterarSenha({required String senhaAtual, required String novaSenha}) {
+    return _executar(() async {
+      await _repositorio.alterarSenha(senhaAtual: senhaAtual, novaSenha: novaSenha);
+    });
+  }
+
   Future<void> logout() async {
     carregando = true;
     notifyListeners();

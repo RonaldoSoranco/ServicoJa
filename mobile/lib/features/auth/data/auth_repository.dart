@@ -74,6 +74,35 @@ class AuthRepository {
     }
   }
 
+  Future<Usuario> atualizarPerfil({required String nome, String? telefone}) async {
+    final json = await _apiClient.put('/api/auth/perfil', autenticado: true, corpo: {
+      'nome': nome,
+      'telefone': telefone ?? '',
+    }) as Map<String, dynamic>;
+    return Usuario.fromJson(json);
+  }
+
+  Future<String> alterarSenha({required String senhaAtual, required String novaSenha}) async {
+    final json = await _apiClient.put('/api/auth/senha', autenticado: true, corpo: {
+      'senhaAtual': senhaAtual,
+      'novaSenha': novaSenha,
+    }) as Map<String, dynamic>;
+    return json['mensagem'] as String? ?? 'Senha alterada com sucesso.';
+  }
+
+  Future<String> recuperarSenha({required String email}) async {
+    final json = await _apiClient.post('/api/auth/recuperar-senha', corpo: {'email': email}) as Map<String, dynamic>;
+    return json['mensagem'] as String? ?? 'Se o e-mail estiver cadastrado, enviaremos as instrucoes.';
+  }
+
+  Future<String> redefinirSenha({required String token, required String novaSenha}) async {
+    final json = await _apiClient.post('/api/auth/redefinir-senha', corpo: {
+      'token': token,
+      'novaSenha': novaSenha,
+    }) as Map<String, dynamic>;
+    return json['mensagem'] as String? ?? 'Senha redefinida com sucesso.';
+  }
+
   Future<void> logout() async {
     final tokenRefresh = await _tokenStorage.lerTokenRefresh();
     try {
