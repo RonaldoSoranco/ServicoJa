@@ -4,6 +4,8 @@ import com.servicoja.dominio.seguranca.TokenRecuperacaoRepository;
 import com.servicoja.dominio.usuario.Perfil;
 import com.servicoja.dominio.usuario.UsuarioRepository;
 import com.servicoja.infra.excecao.NegocioException;
+import com.servicoja.infra.seguranca.LimitadorRequisicoes;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +28,17 @@ class AuthIntegracaoTest {
 
     @Autowired
     private TokenRecuperacaoRepository tokenRecuperacaoRepository;
+
+    @Autowired
+    private LimitadorRequisicoes limitador;
+
+    @BeforeEach
+    void limparLimiteDeCadastro() {
+        // O limitador e um singleton em memoria e nao e revertido pelo rollback transacional
+        // do teste; sem isso, os varios cadastros feitos pelos testes desta classe (todos com
+        // o mesmo IP) eventualmente esbarram no limite de "cadastro:127.0.0.1".
+        limitador.limpar("cadastro:127.0.0.1");
+    }
 
     @Test
     void cadastroClienteGeraTokensDeAcesso() {
