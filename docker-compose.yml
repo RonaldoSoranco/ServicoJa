@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-servico_ja}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-servico_ja}
+      POSTGRES_DB: servico_ja
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-servico_ja}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      DB_URL: jdbc:postgresql://db:5432/servico_ja
+      DB_USER: ${DB_USER:-servico_ja}
+      DB_PASSWORD: ${DB_PASSWORD:-servico_ja}
+      JWT_SECRET: ${JWT_SECRET:-dev-segredo-servico-ja-troque-em-producao-32-bytes-min}
+      JWT_EXPIRACAO_ACESSO_MIN: ${JWT_EXPIRACAO_ACESSO_MIN:-60}
+      JWT_EXPIRACAO_REFRESH_DIAS: ${JWT_EXPIRACAO_REFRESH_DIAS:-30}
+      ASAAS_URL: ${ASAAS_URL:-https://sandbox.asaas.com}
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_WEBHOOK_SEGREDO: ${ASAAS_WEBHOOK_SEGREDO:-}
+      ASAAS_VALOR_MENSAL: ${ASAAS_VALOR_MENSAL:-49.90}
+      ASAAS_VALOR_ANUAL: ${ASAAS_VALOR_ANUAL:-479.00}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      CIDADE_PADRAO: ${CIDADE_PADRAO:-Marau}
+      UF_PADRAO: ${UF_PADRAO:-RS}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
+      ADMIN_SEED_EMAIL: ${ADMIN_SEED_EMAIL:-admin@servicoja.com.br}
+      ADMIN_SEED_SENHA: ${ADMIN_SEED_SENHA:-}
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads-data:/app/uploads
+
+volumes:
+  db-data:
+  uploads-data:

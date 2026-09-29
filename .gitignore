@@ -4,6 +4,10 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Ambiente e uploads locais ###
+.env
+backend/uploads/
+
 ### STS ###
 .apt_generated
 .classpath
