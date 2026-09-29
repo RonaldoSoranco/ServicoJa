@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Necessaria para selecionar fotos da galeria em versoes anteriores ao Android 13
+         (a partir do Android 13 o seletor de fotos do sistema nao exige esta permissao). -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <application
         android:label="servicoja_app"
         android:name="${applicationName}"

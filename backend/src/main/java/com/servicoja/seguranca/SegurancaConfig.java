@@ -1,6 +1,7 @@
 package com.servicoja.seguranca;
 
 import com.servicoja.infra.excecao.ErroResposta;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -17,6 +18,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 import tools.jackson.databind.ObjectMapper;
@@ -28,10 +30,18 @@ public class SegurancaConfig {
 
     private final JwtFiltro jwtFiltro;
     private final ObjectMapper objectMapper;
+    private final List<String> origensCorsPermitidas;
 
-    public SegurancaConfig(JwtFiltro jwtFiltro, ObjectMapper objectMapper) {
+    public SegurancaConfig(
+            JwtFiltro jwtFiltro,
+            ObjectMapper objectMapper,
+            @Value("${servico-ja.cors.allowed-origins}") String origensCorsPermitidas) {
         this.jwtFiltro = jwtFiltro;
         this.objectMapper = objectMapper;
+        this.origensCorsPermitidas = Arrays.stream(origensCorsPermitidas.split(","))
+                .map(String::trim)
+                .filter(origem -> !origem.isEmpty())
+                .toList();
     }
 
     @Bean
@@ -67,6 +77,7 @@ public class SegurancaConfig {
                         .requestMatchers(HttpMethod.GET, "/api/empresas/minhas").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/empresas", "/api/empresas/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/avaliacoes/empresas/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFiltro, UsernamePasswordAuthenticationFilter.class);
@@ -82,7 +93,7 @@ public class SegurancaConfig {
     @Bean
     public CorsConfigurationSource configuracaoCors() {
         CorsConfiguration configuracao = new CorsConfiguration();
-        configuracao.setAllowedOriginPatterns(List.of("*"));
+        configuracao.setAllowedOriginPatterns(origensCorsPermitidas);
         configuracao.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuracao.setAllowedHeaders(List.of("*"));
         configuracao.setAllowCredentials(true);

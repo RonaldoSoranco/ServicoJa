@@ -5,7 +5,9 @@ import com.servicoja.infra.seguranca.UsuarioAtual;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -61,17 +63,25 @@ public class EmpresaController {
         empresaService.excluir(id, usuarioAtual.obter());
     }
 
-    @PostMapping("/{id}/fotos")
+    @PostMapping(value = "/{id}/fotos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public EmpresaDtos.FotoResposta adicionarFoto(@PathVariable Long id,
-                                                  @Valid @RequestBody EmpresaDtos.FotoRequest requisicao) {
-        return empresaService.adicionarFoto(id, usuarioAtual.obter(), requisicao);
+                                                  @RequestParam("arquivo") MultipartFile arquivo,
+                                                  @RequestParam(required = false) String descricao,
+                                                  @RequestParam(required = false) Integer ordem) {
+        return empresaService.adicionarFoto(id, usuarioAtual.obter(), arquivo, descricao, ordem);
     }
 
     @DeleteMapping("/{id}/fotos/{fotoId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removerFoto(@PathVariable Long id, @PathVariable Long fotoId) {
         empresaService.removerFoto(id, fotoId, usuarioAtual.obter());
+    }
+
+    @PostMapping(value = "/{id}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public EmpresaDtos.EmpresaResposta atualizarLogo(@PathVariable Long id,
+                                                     @RequestParam("arquivo") MultipartFile arquivo) {
+        return empresaService.atualizarLogo(id, usuarioAtual.obter(), arquivo);
     }
 
     @PostMapping("/{id}/portfolios")

@@ -39,12 +39,6 @@ public final class EmpresaDtos {
             @Size(max = 255) String site) {
     }
 
-    public record FotoRequest(
-            @NotBlank(message = "Informe a URL da foto.") @Size(max = 500) String url,
-            @Size(max = 255) String descricao,
-            Integer ordem) {
-    }
-
     public record FotoResposta(
             Long id,
             String url,

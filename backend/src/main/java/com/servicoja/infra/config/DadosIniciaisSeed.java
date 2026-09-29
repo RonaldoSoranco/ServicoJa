@@ -16,6 +16,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +34,8 @@ public class DadosIniciaisSeed implements CommandLineRunner {
     private final PasswordEncoder codificador;
     private final String cidadePadrao;
     private final String ufPadrao;
+    private final String adminEmail;
+    private final String adminSenha;
 
     public DadosIniciaisSeed(
             UsuarioRepository usuarioRepository,
@@ -39,13 +43,17 @@ public class DadosIniciaisSeed implements CommandLineRunner {
             EmpresaRepository empresaRepository,
             PasswordEncoder codificador,
             @Value("${servico-ja.app.cidade-padrao}") String cidadePadrao,
-            @Value("${servico-ja.app.uf-padrao}") String ufPadrao) {
+            @Value("${servico-ja.app.uf-padrao}") String ufPadrao,
+            @Value("${servico-ja.admin-seed.email}") String adminEmail,
+            @Value("${servico-ja.admin-seed.senha}") String adminSenha) {
         this.usuarioRepository = usuarioRepository;
         this.categoriaRepository = categoriaRepository;
         this.empresaRepository = empresaRepository;
         this.codificador = codificador;
         this.cidadePadrao = cidadePadrao;
         this.ufPadrao = ufPadrao;
+        this.adminEmail = adminEmail;
+        this.adminSenha = adminSenha;
     }
 
     @Override
@@ -58,16 +66,32 @@ public class DadosIniciaisSeed implements CommandLineRunner {
     }
 
     private void criarAdministrador() {
-        if (usuarioRepository.existsByEmailIgnoreCase("admin@servicoja.com.br")) {
+        if (usuarioRepository.existsByEmailIgnoreCase(adminEmail)) {
             return;
         }
+        boolean senhaGerada = adminSenha == null || adminSenha.isBlank();
+        String senha = senhaGerada ? gerarSenhaAleatoria() : adminSenha;
+
         Usuario admin = new Usuario();
         admin.setNome("Administrador");
-        admin.setEmail("admin@servicoja.com.br");
-        admin.setSenha(codificador.encode("admin1234"));
+        admin.setEmail(adminEmail);
+        admin.setSenha(codificador.encode(senha));
         admin.setPerfil(Perfil.ADMIN);
         usuarioRepository.save(admin);
-        LOGGER.info("Administrador padrao criado (admin@servicoja.com.br).");
+
+        if (senhaGerada) {
+            LOGGER.warn("Administrador padrao criado ({}) com senha gerada automaticamente: {} "
+                            + "— defina ADMIN_SEED_SENHA para controlar essa senha e altere-a apos o primeiro login.",
+                    adminEmail, senha);
+        } else {
+            LOGGER.info("Administrador padrao criado ({}).", adminEmail);
+        }
+    }
+
+    private String gerarSenhaAleatoria() {
+        byte[] bytes = new byte[12];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private Map<String, Categoria> criarCategorias() {

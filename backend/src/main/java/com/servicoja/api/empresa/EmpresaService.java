@@ -13,14 +13,17 @@ import com.servicoja.dominio.usuario.Perfil;
 import com.servicoja.dominio.usuario.Usuario;
 import com.servicoja.dominio.usuario.UsuarioRepository;
 import com.servicoja.infra.PageResposta;
+import com.servicoja.infra.armazenamento.ArmazenamentoArquivos;
 import com.servicoja.infra.excecao.NegocioException;
 import com.servicoja.infra.excecao.RecursoNaoEncontradoException;
 import com.servicoja.infra.servico.NotificacaoService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,12 +31,16 @@ import java.util.List;
 @Service
 public class EmpresaService {
 
+    private static final String PREFIXO_ARQUIVO_LOCAL = "/uploads/";
+
     private final EmpresaRepository empresaRepository;
     private final CategoriaRepository categoriaRepository;
     private final FotoRepository fotoRepository;
     private final PortfolioRepository portfolioRepository;
     private final UsuarioRepository usuarioRepository;
     private final NotificacaoService notificacaoService;
+    private final ArmazenamentoArquivos armazenamento;
+    private final String baseUrl;
 
     public EmpresaService(
             EmpresaRepository empresaRepository,
@@ -41,13 +48,17 @@ public class EmpresaService {
             FotoRepository fotoRepository,
             PortfolioRepository portfolioRepository,
             UsuarioRepository usuarioRepository,
-            NotificacaoService notificacaoService) {
+            NotificacaoService notificacaoService,
+            ArmazenamentoArquivos armazenamento,
+            @Value("${servico-ja.app.base-url}") String baseUrl) {
         this.empresaRepository = empresaRepository;
         this.categoriaRepository = categoriaRepository;
         this.fotoRepository = fotoRepository;
         this.portfolioRepository = portfolioRepository;
         this.usuarioRepository = usuarioRepository;
         this.notificacaoService = notificacaoService;
+        this.armazenamento = armazenamento;
+        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     }
 
     @Transactional(readOnly = true)
@@ -133,15 +144,17 @@ public class EmpresaService {
     }
 
     @Transactional
-    public EmpresaDtos.FotoResposta adicionarFoto(Long id, Usuario usuario, EmpresaDtos.FotoRequest requisicao) {
+    public EmpresaDtos.FotoResposta adicionarFoto(
+            Long id, Usuario usuario, MultipartFile arquivo, String descricao, Integer ordem) {
         Empresa empresa = obter(id);
         verificarProprietario(empresa, usuario);
         exigirPremium(empresa, "O envio de fotos e exclusivo para empresas Premium.");
+        String caminho = armazenamento.salvar(arquivo, "empresas/" + empresa.getId() + "/fotos");
         Foto foto = new Foto();
         foto.setEmpresa(empresa);
-        foto.setUrl(requisicao.url());
-        foto.setDescricao(requisicao.descricao());
-        foto.setOrdem(requisicao.ordem() != null ? requisicao.ordem() : 0);
+        foto.setUrl(caminho);
+        foto.setDescricao(descricao);
+        foto.setOrdem(ordem != null ? ordem : 0);
         return converterFoto(fotoRepository.save(foto));
     }
 
@@ -155,6 +168,21 @@ public class EmpresaService {
             throw new NegocioException("A foto pertence a outra empresa.");
         }
         fotoRepository.delete(foto);
+        armazenamento.remover(foto.getUrl());
+    }
+
+    @Transactional
+    public EmpresaDtos.EmpresaResposta atualizarLogo(Long id, Usuario usuario, MultipartFile arquivo) {
+        Empresa empresa = obter(id);
+        verificarProprietario(empresa, usuario);
+        String logoAntigo = empresa.getLogoUrl();
+        String novoCaminho = armazenamento.salvar(arquivo, "empresas/" + empresa.getId() + "/logo");
+        empresa.setLogoUrl(novoCaminho);
+        empresaRepository.save(empresa);
+        if (logoAntigo != null && logoAntigo.startsWith(PREFIXO_ARQUIVO_LOCAL)) {
+            armazenamento.remover(logoAntigo);
+        }
+        return converterCompleto(empresa);
     }
 
     @Transactional
@@ -273,7 +301,7 @@ public class EmpresaService {
                 empresa.getNome(),
                 new EmpresaDtos.CategoriaSimplificada(
                         empresa.getCategoria().getId(), empresa.getCategoria().getNome()),
-                empresa.getLogoUrl(),
+                urlAbsoluta(empresa.getLogoUrl()),
                 empresa.getCidade(),
                 empresa.getUf(),
                 Boolean.TRUE.equals(empresa.getPremiumAtivo()),
@@ -305,7 +333,7 @@ public class EmpresaService {
                 empresa.getUsuario().getNome(),
                 empresa.getDescricaoCurta(),
                 perfilCompleto ? empresa.getDescricaoCompleta() : null,
-                empresa.getLogoUrl(),
+                urlAbsoluta(empresa.getLogoUrl()),
                 empresa.getTelefone(),
                 empresa.getWhatsapp(),
                 empresa.getEmailContato(),
@@ -332,7 +360,14 @@ public class EmpresaService {
     }
 
     private EmpresaDtos.FotoResposta converterFoto(Foto foto) {
-        return new EmpresaDtos.FotoResposta(foto.getId(), foto.getUrl(), foto.getDescricao(), foto.getOrdem());
+        return new EmpresaDtos.FotoResposta(foto.getId(), urlAbsoluta(foto.getUrl()), foto.getDescricao(), foto.getOrdem());
+    }
+
+    private String urlAbsoluta(String caminho) {
+        if (caminho != null && caminho.startsWith(PREFIXO_ARQUIVO_LOCAL)) {
+            return baseUrl + caminho;
+        }
+        return caminho;
     }
 
     private EmpresaDtos.PortfolioResposta converterPortfolio(Portfolio portfolio) {

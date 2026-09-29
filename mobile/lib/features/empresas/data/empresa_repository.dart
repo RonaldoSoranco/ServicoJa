@@ -52,17 +52,40 @@ class EmpresaRepository {
 
   Future<void> excluir(int id) => _apiClient.delete('/api/empresas/$id', autenticado: true);
 
-  Future<Foto> adicionarFoto(int empresaId, {required String url, String? descricao, int? ordem}) async {
-    final json = await _apiClient.post('/api/empresas/$empresaId/fotos', corpo: {
-      'url': url,
-      if (descricao != null && descricao.isNotEmpty) 'descricao': descricao,
-      if (ordem != null) 'ordem': ordem,
-    }, autenticado: true) as Map<String, dynamic>;
+  Future<Foto> enviarFoto(
+    int empresaId, {
+    required List<int> bytes,
+    required String nomeArquivo,
+    String? descricao,
+    int? ordem,
+  }) async {
+    final json = await _apiClient.enviarArquivo(
+      '/api/empresas/$empresaId/fotos',
+      bytes: bytes,
+      nomeArquivo: nomeArquivo,
+      campoArquivo: 'arquivo',
+      campos: {
+        if (descricao != null && descricao.isNotEmpty) 'descricao': descricao,
+        if (ordem != null) 'ordem': '$ordem',
+      },
+      autenticado: true,
+    ) as Map<String, dynamic>;
     return Foto.fromJson(json);
   }
 
   Future<void> removerFoto(int empresaId, int fotoId) =>
       _apiClient.delete('/api/empresas/$empresaId/fotos/$fotoId', autenticado: true);
+
+  Future<Empresa> enviarLogo(int empresaId, {required List<int> bytes, required String nomeArquivo}) async {
+    final json = await _apiClient.enviarArquivo(
+      '/api/empresas/$empresaId/logo',
+      bytes: bytes,
+      nomeArquivo: nomeArquivo,
+      campoArquivo: 'arquivo',
+      autenticado: true,
+    ) as Map<String, dynamic>;
+    return Empresa.fromJson(json);
+  }
 
   Future<Portfolio> adicionarPortfolio(
     int empresaId, {

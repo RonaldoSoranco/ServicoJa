@@ -40,14 +40,50 @@ class ApiClient {
     return _enviar('DELETE', _uri(caminho), autenticado: autenticado);
   }
 
+  /// Envia um arquivo via `multipart/form-data` (ex.: foto/logo da empresa).
+  ///
+  /// [campos] vira campos de texto adicionais do formulario (ex.: descricao, ordem).
+  Future<dynamic> enviarArquivo(
+    String caminho, {
+    required List<int> bytes,
+    required String nomeArquivo,
+    required String campoArquivo,
+    Map<String, String>? campos,
+    bool autenticado = false,
+  }) {
+    return _enviarComRetry(
+      autenticado: autenticado,
+      construir: (headers) {
+        final request = http.MultipartRequest('POST', _uri(caminho))..headers.addAll(headers);
+        if (campos != null) request.fields.addAll(campos);
+        request.files.add(http.MultipartFile.fromBytes(campoArquivo, bytes, filename: nomeArquivo));
+        return request;
+      },
+    );
+  }
+
   Future<dynamic> _enviar(
     String metodo,
     Uri uri, {
     Object? corpo,
     bool autenticado = false,
+  }) {
+    return _enviarComRetry(
+      autenticado: autenticado,
+      construir: (headers) {
+        final request = http.Request(metodo, uri)..headers.addAll(headers);
+        if (corpo != null) request.body = jsonEncode(corpo);
+        return request;
+      },
+    );
+  }
+
+  Future<dynamic> _enviarComRetry({
+    required http.BaseRequest Function(Map<String, String> headers) construir,
+    bool autenticado = false,
     bool tentandoNovamenteAposRefresh = false,
   }) async {
-    final headers = {'Content-Type': 'application/json', 'Accept': 'application/json'};
+    final headers = {'Accept': 'application/json'};
     if (autenticado) {
       final token = await _tokenStorage.lerTokenAcesso();
       if (token != null) headers['Authorization'] = 'Bearer $token';
@@ -55,8 +91,10 @@ class ApiClient {
 
     http.Response resposta;
     try {
-      final request = http.Request(metodo, uri)..headers.addAll(headers);
-      if (corpo != null) request.body = jsonEncode(corpo);
+      final request = construir(headers);
+      if (request is http.Request) {
+        request.headers.putIfAbsent('Content-Type', () => 'application/json');
+      }
       final streamed = await _client.send(request);
       resposta = await http.Response.fromStream(streamed);
     } on Exception {
@@ -66,7 +104,7 @@ class ApiClient {
     if (resposta.statusCode == 401 && autenticado && !tentandoNovamenteAposRefresh) {
       final renovou = await _tentarRenovarToken();
       if (renovou) {
-        return _enviar(metodo, uri, corpo: corpo, autenticado: autenticado, tentandoNovamenteAposRefresh: true);
+        return _enviarComRetry(construir: construir, autenticado: autenticado, tentandoNovamenteAposRefresh: true);
       }
     }
 

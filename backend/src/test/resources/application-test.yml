@@ -10,3 +10,7 @@ spring:
     port: 25
     username:
     password:
+
+servico-ja:
+  upload:
+    diretorio: ${java.io.tmpdir}/servicoja-uploads-teste

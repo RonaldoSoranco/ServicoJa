@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -70,6 +71,12 @@ public class HandlerGlobalExcecoes {
                 .toList();
         return ResponseEntity.badRequest()
                 .body(ErroResposta.de(400, "VALIDACAO", "Dados invalidos.", detalhes));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErroResposta> arquivoMuitoGrande(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.badRequest()
+                .body(ErroResposta.de(400, "ARQUIVO_MUITO_GRANDE", "O arquivo enviado excede o tamanho maximo permitido."));
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})

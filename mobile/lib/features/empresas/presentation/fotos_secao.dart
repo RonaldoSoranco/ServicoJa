@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/empresa.dart';
 import 'secao_bloqueada_premium.dart';
 
-/// Secao "Fotos" da tela de edicao de empresa (Fase 8) — exclusiva para Premium.
+/// Secao "Fotos" da tela de edicao de empresa — exclusiva para Premium.
 class FotosSecao extends StatelessWidget {
   const FotosSecao({
     super.key,
@@ -15,26 +16,21 @@ class FotosSecao extends StatelessWidget {
 
   final bool premiumAtivo;
   final List<Foto> fotos;
-  final Future<void> Function(String url, String? descricao) aoAdicionar;
+  final Future<void> Function(List<int> bytes, String nomeArquivo, String? descricao) aoAdicionar;
   final Future<void> Function(Foto foto) aoRemover;
 
-  Future<void> _abrirDialogoAdicionar(BuildContext context) async {
-    final urlController = TextEditingController();
+  Future<void> _selecionarEAdicionar(BuildContext context) async {
+    final arquivo = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (arquivo == null || !context.mounted) return;
+
     final descricaoController = TextEditingController();
-    final resultado = await showDialog<bool>(
+    final confirmar = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Adicionar foto'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: urlController, decoration: const InputDecoration(labelText: 'URL da foto')),
-            const SizedBox(height: 8),
-            TextField(
-              controller: descricaoController,
-              decoration: const InputDecoration(labelText: 'Descricao (opcional)'),
-            ),
-          ],
+        content: TextField(
+          controller: descricaoController,
+          decoration: const InputDecoration(labelText: 'Descricao (opcional)'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
@@ -42,9 +38,10 @@ class FotosSecao extends StatelessWidget {
         ],
       ),
     );
-    if (resultado == true && urlController.text.trim().isNotEmpty) {
-      await aoAdicionar(urlController.text.trim(), descricaoController.text.trim());
-    }
+    if (confirmar != true) return;
+
+    final bytes = await arquivo.readAsBytes();
+    await aoAdicionar(bytes, arquivo.name, descricaoController.text.trim());
   }
 
   @override
@@ -62,7 +59,7 @@ class FotosSecao extends StatelessWidget {
           children: [
             const Expanded(child: Text('Fotos', style: TextStyle(fontWeight: FontWeight.bold))),
             TextButton.icon(
-              onPressed: () => _abrirDialogoAdicionar(context),
+              onPressed: () => _selecionarEAdicionar(context),
               icon: const Icon(Icons.add_a_photo_outlined),
               label: const Text('Adicionar'),
             ),

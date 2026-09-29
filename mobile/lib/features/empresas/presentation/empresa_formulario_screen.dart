@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../categorias/data/categoria_repository.dart';
@@ -184,12 +185,33 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
     }
   }
 
-  Future<void> _adicionarFoto(String url, String? descricao) async {
+  Future<void> _adicionarFoto(List<int> bytes, String nomeArquivo, String? descricao) async {
     try {
-      await _repositorio.adicionarFoto(_empresaAtual!.id, url: url, descricao: descricao);
+      await _repositorio.enviarFoto(_empresaAtual!.id, bytes: bytes, nomeArquivo: nomeArquivo, descricao: descricao);
       await _recarregarEmpresaAtual();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  bool _enviandoLogo = false;
+
+  Future<void> _enviarLogo() async {
+    final arquivo = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (arquivo == null) return;
+    setState(() => _enviandoLogo = true);
+    try {
+      final bytes = await arquivo.readAsBytes();
+      final atualizada = await _repositorio.enviarLogo(_empresaAtual!.id, bytes: bytes, nomeArquivo: arquivo.name);
+      if (mounted) {
+        setState(() => _empresaAtual = atualizada);
+        // Mantem o campo de texto sincronizado, pois e ele que e enviado ao salvar o formulario.
+        _logoUrlController.text = atualizada.logoUrl ?? '';
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _enviandoLogo = false);
     }
   }
 
@@ -300,7 +322,20 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _logoUrlController,
-                      decoration: const InputDecoration(labelText: 'URL do logo (opcional)'),
+                      decoration: InputDecoration(
+                        labelText: 'URL do logo (opcional)',
+                        helperText: _editando ? 'Ou envie uma imagem diretamente pelo botao ao lado.' : null,
+                        suffixIcon: _editando
+                            ? IconButton(
+                                icon: _enviandoLogo
+                                    ? const SizedBox(
+                                        height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.upload_outlined),
+                                tooltip: 'Enviar imagem do logo',
+                                onPressed: _enviandoLogo ? null : _enviarLogo,
+                              )
+                            : null,
+                      ),
                     ),
                     _tituloSecao('Contato'),
                     TextFormField(
