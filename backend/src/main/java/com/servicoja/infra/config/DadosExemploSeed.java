@@ -4,6 +4,8 @@ import com.servicoja.dominio.categoria.Categoria;
 import com.servicoja.dominio.categoria.CategoriaRepository;
 import com.servicoja.dominio.empresa.Empresa;
 import com.servicoja.dominio.empresa.EmpresaRepository;
+import com.servicoja.dominio.horario.HorarioFuncionamento;
+import com.servicoja.dominio.horario.HorarioFuncionamentoRepository;
 import com.servicoja.dominio.usuario.Perfil;
 import com.servicoja.dominio.usuario.Usuario;
 import com.servicoja.dominio.usuario.UsuarioRepository;
@@ -16,12 +18,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.IntStream;
 
 /**
- * Empresas de exemplo para desenvolvimento e testes. Nunca roda em producao: as contas criadas
- * aqui usam uma senha conhecida. As categorias usadas vem da migracao V3.
+ * Empresas de exemplo para desenvolvimento e testes, com localizacao em Marau e horarios de
+ * funcionamento. Nunca roda em producao: as contas criadas aqui usam uma senha conhecida.
+ * As categorias usadas vem da migracao V3.
  */
 @Component
 @Profile("!prod")
@@ -29,9 +35,41 @@ public class DadosExemploSeed implements CommandLineRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DadosExemploSeed.class);
 
+    private record Horario(int diaSemana, LocalTime abre, LocalTime fecha) {
+    }
+
+    private record EmpresaExemplo(
+            String nome, String categoria, String email, String telefone, String descricao,
+            String endereco, String numero, String bairro, String latitude, String longitude,
+            List<Horario> horarios) {
+    }
+
+    private static final List<EmpresaExemplo> EMPRESAS = List.of(
+            new EmpresaExemplo("Elétrica Silva", "Eletricista", "eletrica.silva@exemplo.com", "(54) 3342-1001",
+                    "Instalacoes e reparos eletricos em Marau e regiao.",
+                    "Rua das Flores", "120", "Centro", "-28.4475", "-52.2010",
+                    juntar(diasUteis("08:00", "12:00"), diasUteis("13:30", "18:00"), sabado("08:00", "12:00"))),
+            new EmpresaExemplo("Hidráulica Marau", "Encanador", "hidraulica.marau@exemplo.com", "(54) 3342-1002",
+                    "Desentupimentos, vazamentos e instalacoes hidraulicas. Atendimento 24 horas.",
+                    "Av. Julio Borella", "45", "Centro", "-28.4502", "-52.1968",
+                    todosOsDias("00:00", "23:59")),
+            new EmpresaExemplo("Beleza & Cia", "Salão de Beleza", "beleza.cia@exemplo.com", "(54) 3342-1003",
+                    "Cabeleireira, manicure e estetica facial.",
+                    "Rua Camilo Cimadon", "88", "Centro", "-28.4468", "-52.1979",
+                    intervalo(2, 6, "09:00", "19:00")),
+            new EmpresaExemplo("Mecânica do Zé", "Automecânica", "mecanica.ze@exemplo.com", "(54) 3342-1004",
+                    "Troca de oleo, freios e manutencao geral.",
+                    "Rod. RS-324", "km 6", "Zona Rural", "-28.4630", "-52.2205",
+                    juntar(diasUteis("07:30", "18:00"), sabado("07:30", "12:00"))),
+            new EmpresaExemplo("Reparos Rápidos", "Marido de Aluguel", "reparos.rapidos@exemplo.com", "(54) 3342-1005",
+                    "Montagem de moveis, quadros e pequenos reparos.",
+                    "Rua Emilio Seleme", "230", "Santa Helena", "-28.4540", "-52.2050",
+                    diasUteis("08:00", "17:00")));
+
     private final UsuarioRepository usuarioRepository;
     private final CategoriaRepository categoriaRepository;
     private final EmpresaRepository empresaRepository;
+    private final HorarioFuncionamentoRepository horarioRepository;
     private final PasswordEncoder codificador;
     private final String cidadePadrao;
     private final String ufPadrao;
@@ -40,12 +78,14 @@ public class DadosExemploSeed implements CommandLineRunner {
             UsuarioRepository usuarioRepository,
             CategoriaRepository categoriaRepository,
             EmpresaRepository empresaRepository,
+            HorarioFuncionamentoRepository horarioRepository,
             PasswordEncoder codificador,
             @Value("${servico-ja.app.cidade-padrao}") String cidadePadrao,
             @Value("${servico-ja.app.uf-padrao}") String ufPadrao) {
         this.usuarioRepository = usuarioRepository;
         this.categoriaRepository = categoriaRepository;
         this.empresaRepository = empresaRepository;
+        this.horarioRepository = horarioRepository;
         this.codificador = codificador;
         this.cidadePadrao = cidadePadrao;
         this.ufPadrao = ufPadrao;
@@ -54,68 +94,95 @@ public class DadosExemploSeed implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        List<Map<String, String>> empresas = List.of(
-                Map.of("nome", "Elétrica Silva", "categoria", "Eletricista",
-                        "email", "eletrica.silva@exemplo.com", "telefone", "(54) 3342-1001",
-                        "descricao", "Instalacoes e reparos eletricos em Marau e regiao.",
-                        "endereco", "Rua das Flores", "numero", "120", "bairro", "Centro"),
-                Map.of("nome", "Hidráulica Marau", "categoria", "Encanador",
-                        "email", "hidraulica.marau@exemplo.com", "telefone", "(54) 3342-1002",
-                        "descricao", "Desentupimentos, vazamentos e instalacoes hidraulicas.",
-                        "endereco", "Av. Julio Borella", "numero", "45", "bairro", "Centro"),
-                Map.of("nome", "Beleza & Cia", "categoria", "Salão de Beleza",
-                        "email", "beleza.cia@exemplo.com", "telefone", "(54) 3342-1003",
-                        "descricao", "Cabeleireira, manicure e estetica facial.",
-                        "endereco", "Rua Camilo Cimadon", "numero", "88", "bairro", "Centro"),
-                Map.of("nome", "Mecânica do Zé", "categoria", "Automecânica",
-                        "email", "mecanica.ze@exemplo.com", "telefone", "(54) 3342-1004",
-                        "descricao", "Troca de oleo, freios e manutencao geral.",
-                        "endereco", "Rod. RS-324", "numero", "km 6", "bairro", "Zona Rural"),
-                Map.of("nome", "Reparos Rápidos", "categoria", "Marido de Aluguel",
-                        "email", "reparos.rapidos@exemplo.com", "telefone", "(54) 3342-1005",
-                        "descricao", "Montagem de moveis, quadros e pequenos reparos.",
-                        "endereco", "Rua Emilio Seleme", "numero", "230", "bairro", "Santa Helena"));
-
-        for (Map<String, String> dado : empresas) {
-            criarEmpresaExemplo(dado);
-        }
+        EMPRESAS.forEach(this::criarOuCompletar);
         LOGGER.info("Dados de exemplo carregados com sucesso.");
     }
 
-    private void criarEmpresaExemplo(Map<String, String> dado) {
-        String email = dado.get("email");
-        if (usuarioRepository.existsByEmailIgnoreCase(email)) {
-            return;
+    /** Cria a empresa de exemplo ou, se ela ja existir, preenche localizacao e horarios que faltarem. */
+    private void criarOuCompletar(EmpresaExemplo exemplo) {
+        Empresa empresa = usuarioRepository.findByEmailIgnoreCase(exemplo.email())
+                .map(dono -> empresaRepository.findByUsuarioIdAndExcluidaEmIsNull(dono.getId()))
+                .flatMap(empresas -> empresas.stream().findFirst())
+                .orElse(null);
+        if (empresa == null) {
+            if (usuarioRepository.existsByEmailIgnoreCase(exemplo.email())) {
+                return;
+            }
+            empresa = criar(exemplo);
+            if (empresa == null) {
+                return;
+            }
         }
-        Categoria categoria = categoriaRepository.findFirstByNomeIgnoreCase(dado.get("categoria"));
+        if (!empresa.temLocalizacao()) {
+            empresa.setLatitude(new BigDecimal(exemplo.latitude()));
+            empresa.setLongitude(new BigDecimal(exemplo.longitude()));
+            empresaRepository.save(empresa);
+        }
+        if (horarioRepository.findByEmpresaIdOrderByDiaSemanaAscAbreAsc(empresa.getId()).isEmpty()) {
+            Empresa dona = empresa;
+            horarioRepository.saveAll(exemplo.horarios().stream()
+                    .map(h -> new HorarioFuncionamento(dona, h.diaSemana(), h.abre(), h.fecha()))
+                    .toList());
+        }
+    }
+
+    private Empresa criar(EmpresaExemplo exemplo) {
+        Categoria categoria = categoriaRepository.findFirstByNomeIgnoreCase(exemplo.categoria());
         if (categoria == null) {
             LOGGER.warn("Categoria \"{}\" nao encontrada; empresa de exemplo \"{}\" ignorada.",
-                    dado.get("categoria"), dado.get("nome"));
-            return;
+                    exemplo.categoria(), exemplo.nome());
+            return null;
         }
 
         Usuario dono = new Usuario();
-        dono.setNome("Responsável - " + dado.get("nome"));
-        dono.setEmail(email);
+        dono.setNome("Responsável - " + exemplo.nome());
+        dono.setEmail(exemplo.email());
         dono.setSenha(codificador.encode("senha123"));
-        dono.setTelefone(dado.get("telefone"));
+        dono.setTelefone(exemplo.telefone());
         dono.setPerfil(Perfil.EMPRESA);
         usuarioRepository.save(dono);
 
         Empresa empresa = new Empresa();
         empresa.setUsuario(dono);
         empresa.setCategoria(categoria);
-        empresa.setNome(dado.get("nome"));
-        empresa.setDescricaoCurta(dado.get("descricao"));
-        empresa.setTelefone(dado.get("telefone"));
-        empresa.setWhatsapp(dado.get("telefone"));
-        empresa.setEmailContato(email);
-        empresa.setEndereco(dado.get("endereco"));
-        empresa.setNumero(dado.get("numero"));
-        empresa.setBairro(dado.get("bairro"));
+        empresa.setNome(exemplo.nome());
+        empresa.setDescricaoCurta(exemplo.descricao());
+        empresa.setTelefone(exemplo.telefone());
+        empresa.setWhatsapp(exemplo.telefone());
+        empresa.setEmailContato(exemplo.email());
+        empresa.setEndereco(exemplo.endereco());
+        empresa.setNumero(exemplo.numero());
+        empresa.setBairro(exemplo.bairro());
         empresa.setCidade(cidadePadrao);
         empresa.setUf(ufPadrao);
         empresa.setAprovada(true);
-        empresaRepository.save(empresa);
+        return empresaRepository.save(empresa);
+    }
+
+    private static List<Horario> intervalo(int primeiroDia, int ultimoDia, String abre, String fecha) {
+        return IntStream.rangeClosed(primeiroDia, ultimoDia)
+                .mapToObj(dia -> new Horario(dia, LocalTime.parse(abre), LocalTime.parse(fecha)))
+                .toList();
+    }
+
+    private static List<Horario> diasUteis(String abre, String fecha) {
+        return intervalo(1, 5, abre, fecha);
+    }
+
+    private static List<Horario> sabado(String abre, String fecha) {
+        return intervalo(6, 6, abre, fecha);
+    }
+
+    private static List<Horario> todosOsDias(String abre, String fecha) {
+        return intervalo(1, 7, abre, fecha);
+    }
+
+    @SafeVarargs
+    private static List<Horario> juntar(List<Horario>... listas) {
+        List<Horario> todos = new ArrayList<>();
+        for (List<Horario> lista : listas) {
+            todos.addAll(lista);
+        }
+        return todos;
     }
 }

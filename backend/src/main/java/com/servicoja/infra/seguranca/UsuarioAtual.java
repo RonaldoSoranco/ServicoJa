@@ -8,6 +8,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+
 @Service
 public class UsuarioAtual {
 
@@ -18,11 +20,16 @@ public class UsuarioAtual {
     }
 
     public Long obterId() {
+        return obterIdOpcional().orElseThrow(() -> new NaoAutenticadoException("Autenticacao necessaria."));
+    }
+
+    /** Para endpoints publicos que se comportam diferente quando ha alguem logado. */
+    public Optional<Long> obterIdOpcional() {
         Authentication autenticacao = SecurityContextHolder.getContext().getAuthentication();
-        if (autenticacao == null || !(autenticacao.getPrincipal() instanceof UsuarioPrincipal principal)) {
-            throw new NaoAutenticadoException("Autenticacao necessaria.");
+        if (autenticacao != null && autenticacao.getPrincipal() instanceof UsuarioPrincipal principal) {
+            return Optional.of(principal.id());
         }
-        return principal.id();
+        return Optional.empty();
     }
 
     /**

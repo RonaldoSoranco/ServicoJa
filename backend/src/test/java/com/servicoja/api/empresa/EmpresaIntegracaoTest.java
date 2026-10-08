@@ -20,6 +20,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalTime;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -48,7 +52,7 @@ class EmpresaIntegracaoTest {
 
     @Test
     void buscaPorCidadeRetornaEmpresasDoSeed() {
-        var resultado = empresaService.buscarPublico(null, null, "Marau", "RS", 0, 10);
+        var resultado = empresaService.buscarPublico(filtro(null, null, "Marau", "RS"), 0, 10);
 
         assertThat(resultado.totalElementos()).isGreaterThan(0);
     }
@@ -57,7 +61,7 @@ class EmpresaIntegracaoTest {
     void buscaPorCategoriaFiltraResultados() {
         Categoria categoria = categoriaRepository.findAll().stream().findFirst().orElseThrow();
 
-        var resultado = empresaService.buscarPublico(categoria.getId(), null, null, null, 0, 10);
+        var resultado = empresaService.buscarPublico(filtro(categoria.getId(), null, null, null), 0, 10);
 
         assertThat(resultado.conteudo()).allSatisfy(empresa ->
                 assertThat(empresa.categoria().id()).isEqualTo(categoria.getId()));
@@ -85,11 +89,11 @@ class EmpresaIntegracaoTest {
         var criada = empresaService.criar(dono, new EmpresaDtos.EmpresaRequest(
                 "Empresa Basica", categoria.getId(), null, "Descricao completa premium",
                 null, null, null, null, null, null, null, "Marau", "RS", null, null,
-                "Seg a Sex", "{\"instagram\":\"@empresa\"}", "https://site.com"));
+                null, "{\"instagram\":\"@empresa\"}", "https://site.com"));
 
         assertThat(criada.perfilCompleto()).isFalse();
         assertThat(criada.descricaoCompleta()).isNull();
-        assertThat(criada.horarioFuncionamento()).isNull();
+        assertThat(criada.redesSociais()).isNull();
         assertThat(criada.site()).isNull();
     }
 
@@ -110,7 +114,8 @@ class EmpresaIntegracaoTest {
         assertThat(avaliacaoRepository.countByEmpresaIdAndStatus(empresa.getId(), StatusAvaliacao.APROVADA)).isZero();
         assertThat(favoritoRepository.existsByUsuarioIdAndEmpresaId(cliente.getId(), empresa.getId())).isFalse();
 
-        assertThat(empresaService.buscarPublico(null, "Empresa Que Sera Excluida", null, null, 0, 10).conteudo()).isEmpty();
+        assertThat(empresaService.buscarPublico(filtro(null, "Empresa Que Sera Excluida", null, null), 0, 10).conteudo())
+                .isEmpty();
         assertThat(empresaService.buscarAdministrativo(null, "Empresa Que Sera Excluida", null, null, 0, 10).conteudo())
                 .isEmpty();
         assertThat(empresaService.listarMinhas(dono)).isEmpty();
@@ -138,6 +143,74 @@ class EmpresaIntegracaoTest {
                 .isInstanceOf(NegocioException.class)
                 .hasMessageContaining("permissao");
         assertThat(empresaRepository.findById(empresa.getId()).orElseThrow().getExcluidaEm()).isNull();
+    }
+
+    @Test
+    void alterarHorariosELocalizacaoNaoTiraAEmpresaDoAr() {
+        Usuario dono = criarUsuario("Dono Horarios", "dono.horarios@teste.com", Perfil.EMPRESA);
+        Empresa empresa = criarEmpresaAprovada(dono, "Empresa Horarios");
+        var horarios = List.of(
+                new EmpresaDtos.HorarioDto(1, LocalTime.of(8, 0), LocalTime.of(12, 0)),
+                new EmpresaDtos.HorarioDto(1, LocalTime.of(13, 30), LocalTime.of(18, 0)));
+
+        var atualizada = empresaService.atualizar(empresa.getId(), dono, requisicao(
+                empresa, "Empresa Horarios", new BigDecimal("-28.4489"), new BigDecimal("-52.1992"), horarios));
+
+        assertThat(atualizada.aprovada()).isTrue();
+        assertThat(atualizada.horarios()).hasSize(2);
+        assertThat(atualizada.latitude()).isEqualByComparingTo("-28.4489");
+    }
+
+    @Test
+    void alterarONomeExigeNovaAprovacao() {
+        Usuario dono = criarUsuario("Dono Renomeia", "dono.renomeia@teste.com", Perfil.EMPRESA);
+        Empresa empresa = criarEmpresaAprovada(dono, "Nome Antigo");
+
+        var atualizada = empresaService.atualizar(empresa.getId(), dono, requisicao(empresa, "Nome Novo", null, null, null));
+
+        assertThat(atualizada.aprovada()).isFalse();
+    }
+
+    @Test
+    void horariosNulosMantemOsAtuais() {
+        Usuario dono = criarUsuario("Dono Mantem", "dono.mantem@teste.com", Perfil.EMPRESA);
+        Empresa empresa = criarEmpresaAprovada(dono, "Empresa Mantem");
+        var horarios = List.of(new EmpresaDtos.HorarioDto(2, LocalTime.of(9, 0), LocalTime.of(17, 0)));
+        empresaService.atualizar(empresa.getId(), dono, requisicao(empresa, "Empresa Mantem", null, null, horarios));
+
+        var atualizada = empresaService.atualizar(empresa.getId(), dono, requisicao(empresa, "Empresa Mantem", null, null, null));
+
+        assertThat(atualizada.horarios()).hasSize(1);
+    }
+
+    @Test
+    void recusaHorariosSobrepostosOuInvertidos() {
+        Usuario dono = criarUsuario("Dono Invalido", "dono.invalido@teste.com", Perfil.EMPRESA);
+        Empresa empresa = criarEmpresaAprovada(dono, "Empresa Invalida");
+        var sobrepostos = List.of(
+                new EmpresaDtos.HorarioDto(3, LocalTime.of(8, 0), LocalTime.of(12, 0)),
+                new EmpresaDtos.HorarioDto(3, LocalTime.of(11, 0), LocalTime.of(14, 0)));
+        var invertido = List.of(new EmpresaDtos.HorarioDto(4, LocalTime.of(18, 0), LocalTime.of(8, 0)));
+
+        assertThatThrownBy(() -> empresaService.atualizar(empresa.getId(), dono,
+                requisicao(empresa, "Empresa Invalida", null, null, sobrepostos)))
+                .isInstanceOf(NegocioException.class)
+                .hasMessageContaining("sobrepor");
+        assertThatThrownBy(() -> empresaService.atualizar(empresa.getId(), dono,
+                requisicao(empresa, "Empresa Invalida", null, null, invertido)))
+                .isInstanceOf(NegocioException.class)
+                .hasMessageContaining("fechamento");
+    }
+
+    private EmpresaDtos.EmpresaRequest requisicao(Empresa empresa, String nome, BigDecimal latitude,
+                                                  BigDecimal longitude, List<EmpresaDtos.HorarioDto> horarios) {
+        return new EmpresaDtos.EmpresaRequest(
+                nome, empresa.getCategoria().getId(), null, null, empresa.getTelefone(), null, null,
+                null, null, null, null, "Marau", "RS", latitude, longitude, horarios, null, null);
+    }
+
+    private static EmpresaDtos.FiltroBusca filtro(Long categoriaId, String nome, String cidade, String uf) {
+        return new EmpresaDtos.FiltroBusca(categoriaId, nome, cidade, uf, null, null, false);
     }
 
     private Usuario criarUsuario(String nome, String email, Perfil perfil) {

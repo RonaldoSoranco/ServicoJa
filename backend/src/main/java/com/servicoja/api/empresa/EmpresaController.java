@@ -3,6 +3,7 @@ package com.servicoja.api.empresa;
 import com.servicoja.infra.PageResposta;
 import com.servicoja.infra.seguranca.UsuarioAtual;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -17,22 +18,33 @@ import java.util.List;
 public class EmpresaController {
 
     private final EmpresaService empresaService;
+    private final DesempenhoService desempenhoService;
     private final UsuarioAtual usuarioAtual;
 
-    public EmpresaController(EmpresaService empresaService, UsuarioAtual usuarioAtual) {
+    public EmpresaController(EmpresaService empresaService, DesempenhoService desempenhoService, UsuarioAtual usuarioAtual) {
         this.empresaService = empresaService;
+        this.desempenhoService = desempenhoService;
         this.usuarioAtual = usuarioAtual;
     }
 
+    /**
+     * Busca publica. {@code latitude}/{@code longitude} (posicao de quem busca) ordenam por
+     * proximidade; {@code abertas=true} traz so empresas abertas no momento.
+     */
     @GetMapping
     public PageResposta<EmpresaDtos.EmpresaSimplesResposta> buscar(
             @RequestParam(required = false) Long categoriaId,
             @RequestParam(required = false) String nome,
             @RequestParam(required = false) String cidade,
             @RequestParam(required = false) String uf,
+            @RequestParam(required = false) Double latitude,
+            @RequestParam(required = false) Double longitude,
+            @RequestParam(defaultValue = "false") boolean abertas,
             @RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "10") int tamanho) {
-        return empresaService.buscarPublico(categoriaId, nome, cidade, uf, pagina, tamanho);
+        EmpresaDtos.FiltroBusca filtro =
+                new EmpresaDtos.FiltroBusca(categoriaId, nome, cidade, uf, latitude, longitude, abertas);
+        return empresaService.buscarPublico(filtro, pagina, tamanho);
     }
 
     @GetMapping("/{id}")
@@ -105,5 +117,20 @@ public class EmpresaController {
     @DeleteMapping("/{id}/destaque")
     public EmpresaDtos.MensagemResposta removerDestaque(@PathVariable Long id) {
         return empresaService.removerDestaque(id, usuarioAtual.obter());
+    }
+
+    /** Registra uma interacao com o perfil (publico: visitantes tambem contam no painel). */
+    @PostMapping("/{id}/eventos")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void registrarEvento(@PathVariable Long id,
+                                @Valid @RequestBody EmpresaDtos.EventoRequest requisicao,
+                                HttpServletRequest request) {
+        desempenhoService.registrar(id, requisicao.tipo(), request.getRemoteAddr(),
+                usuarioAtual.obterIdOpcional().orElse(null));
+    }
+
+    @GetMapping("/{id}/desempenho")
+    public EmpresaDtos.DesempenhoResposta desempenho(@PathVariable Long id) {
+        return desempenhoService.consultar(id, usuarioAtual.obter());
     }
 }

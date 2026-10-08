@@ -2,6 +2,7 @@ package com.servicoja.api.auth;
 
 import com.servicoja.api.avaliacao.AvaliacaoDtos;
 import com.servicoja.api.avaliacao.AvaliacaoService;
+import com.servicoja.api.empresa.EmpresaDtos;
 import com.servicoja.api.empresa.EmpresaService;
 import com.servicoja.dominio.assinatura.Assinatura;
 import com.servicoja.dominio.assinatura.AssinaturaRepository;
@@ -166,8 +167,8 @@ class ExclusaoContaIntegracaoTest {
         Empresa removida = empresaRepository.findById(empresa.getId()).orElseThrow();
         assertThat(removida.getExcluidaEm()).isNotNull();
         assertThat(removida.getPremiumAtivo()).isFalse();
-        assertThat(empresaService.buscarPublico(null, "Empresa Premium Excluida", null, null, 0, 10).conteudo())
-                .isEmpty();
+        var filtro = new EmpresaDtos.FiltroBusca(null, "Empresa Premium Excluida", null, null, null, null, false);
+        assertThat(empresaService.buscarPublico(filtro, 0, 10).conteudo()).isEmpty();
     }
 
     @Test

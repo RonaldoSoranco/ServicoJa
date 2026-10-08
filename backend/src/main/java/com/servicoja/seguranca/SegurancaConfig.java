@@ -76,6 +76,7 @@ public class SegurancaConfig {
                         .requestMatchers("/api/categorias", "/api/categorias/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/empresas/minhas").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/empresas", "/api/empresas/*").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/empresas/*/eventos").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/avaliacoes/empresas/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

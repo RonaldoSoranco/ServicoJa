@@ -1,6 +1,7 @@
 package com.servicoja.dominio.empresa;
 
 import com.servicoja.dominio.categoria.Categoria;
+import com.servicoja.dominio.usuario.Perfil;
 import com.servicoja.dominio.usuario.Usuario;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -75,9 +76,6 @@ public class Empresa {
     private BigDecimal longitude;
 
     @Column(columnDefinition = "TEXT")
-    private String horarioFuncionamento;
-
-    @Column(columnDefinition = "TEXT")
     private String redesSociais;
 
     @Column(length = 255)
@@ -126,6 +124,15 @@ public class Empresa {
         return Boolean.TRUE.equals(premiumAtivo);
     }
 
+    public boolean temLocalizacao() {
+        return latitude != null && longitude != null;
+    }
+
+    /** O dono da empresa e os administradores podem altera-la e ver seus dados internos. */
+    public boolean podeSerGerenciadaPor(Usuario usuario) {
+        return usuario.getPerfil() == Perfil.ADMIN || this.usuario.getId().equals(usuario.getId());
+    }
+
     /**
      * Tira a empresa da plataforma. O registro e mantido (sem os dados de contato) porque
      * assinaturas e pagamentos continuam referenciando-o como historico financeiro.
@@ -148,7 +155,6 @@ public class Empresa {
         bairro = null;
         latitude = null;
         longitude = null;
-        horarioFuncionamento = null;
         redesSociais = null;
         site = null;
         mediaAvaliacoes = BigDecimal.ZERO;

@@ -153,6 +153,27 @@ class SegurancaHttpIntegracaoTest {
     }
 
     @Test
+    void visitantePodeRegistrarInteracaoMasNaoVerODesempenho() throws Exception {
+        Empresa empresa = criarEmpresa(criarUsuario(Perfil.EMPRESA, "dono.eventos@teste.com"));
+        empresa.setAprovada(true);
+        empresaRepository.save(empresa);
+
+        mockMvc.perform(post("/api/empresas/{id}/eventos", empresa.getId())
+                        .contentType(APPLICATION_JSON).content("{\"tipo\":\"CLIQUE_WHATSAPP\"}"))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/empresas/{id}/desempenho", empresa.getId()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void buscaRecusaCoordenadasInvalidas() throws Exception {
+        mockMvc.perform(get("/api/empresas").param("latitude", "-28.4").param("longitude", "500"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/empresas").param("latitude", "-28.4"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void arquivoDeUploadInexistenteRetorna404() throws Exception {
         mockMvc.perform(get("/uploads/empresas/999/fotos/nao-existe.jpg"))
                 .andExpect(status().isNotFound());

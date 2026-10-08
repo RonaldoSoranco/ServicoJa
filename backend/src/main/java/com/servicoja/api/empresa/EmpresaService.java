@@ -6,9 +6,12 @@ import com.servicoja.dominio.categoria.Categoria;
 import com.servicoja.dominio.categoria.CategoriaRepository;
 import com.servicoja.dominio.empresa.Empresa;
 import com.servicoja.dominio.empresa.EmpresaRepository;
+import com.servicoja.dominio.evento.EventoEmpresaRepository;
 import com.servicoja.dominio.favorito.FavoritoRepository;
 import com.servicoja.dominio.foto.Foto;
 import com.servicoja.dominio.foto.FotoRepository;
+import com.servicoja.dominio.horario.HorarioFuncionamento;
+import com.servicoja.dominio.horario.HorarioFuncionamentoRepository;
 import com.servicoja.dominio.notificacao.TipoNotificacao;
 import com.servicoja.dominio.portfolio.Portfolio;
 import com.servicoja.dominio.portfolio.PortfolioRepository;
@@ -16,6 +19,7 @@ import com.servicoja.dominio.usuario.Perfil;
 import com.servicoja.dominio.usuario.Usuario;
 import com.servicoja.dominio.usuario.UsuarioRepository;
 import com.servicoja.infra.AposCommit;
+import com.servicoja.infra.Geolocalizacao;
 import com.servicoja.infra.PageResposta;
 import com.servicoja.infra.armazenamento.ArmazenamentoArquivos;
 import com.servicoja.infra.excecao.NegocioException;
@@ -29,8 +33,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class EmpresaService {
@@ -43,10 +55,13 @@ public class EmpresaService {
     private final PortfolioRepository portfolioRepository;
     private final AvaliacaoRepository avaliacaoRepository;
     private final FavoritoRepository favoritoRepository;
+    private final HorarioFuncionamentoRepository horarioRepository;
+    private final EventoEmpresaRepository eventoRepository;
     private final UsuarioRepository usuarioRepository;
     private final AssinaturaService assinaturaService;
     private final NotificacaoService notificacaoService;
     private final ArmazenamentoArquivos armazenamento;
+    private final Clock relogio;
     private final String baseUrl;
 
     public EmpresaService(
@@ -56,10 +71,13 @@ public class EmpresaService {
             PortfolioRepository portfolioRepository,
             AvaliacaoRepository avaliacaoRepository,
             FavoritoRepository favoritoRepository,
+            HorarioFuncionamentoRepository horarioRepository,
+            EventoEmpresaRepository eventoRepository,
             UsuarioRepository usuarioRepository,
             AssinaturaService assinaturaService,
             NotificacaoService notificacaoService,
             ArmazenamentoArquivos armazenamento,
+            Clock relogio,
             @Value("${servico-ja.app.base-url}") String baseUrl) {
         this.empresaRepository = empresaRepository;
         this.categoriaRepository = categoriaRepository;
@@ -67,20 +85,36 @@ public class EmpresaService {
         this.portfolioRepository = portfolioRepository;
         this.avaliacaoRepository = avaliacaoRepository;
         this.favoritoRepository = favoritoRepository;
+        this.horarioRepository = horarioRepository;
+        this.eventoRepository = eventoRepository;
         this.usuarioRepository = usuarioRepository;
         this.assinaturaService = assinaturaService;
         this.notificacaoService = notificacaoService;
         this.armazenamento = armazenamento;
+        this.relogio = relogio;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     }
 
     @Transactional(readOnly = true)
     public PageResposta<EmpresaDtos.EmpresaSimplesResposta> buscarPublico(
-            Long categoriaId, String nome, String cidade, String uf, int pagina, int tamanho) {
+            EmpresaDtos.FiltroBusca filtro, int pagina, int tamanho) {
         Pageable pageable = PageRequest.of(Math.max(pagina, 0), Math.min(Math.max(tamanho, 1), 50));
+        LocalDateTime agora = LocalDateTime.now(relogio);
+        boolean porDistancia = filtro.temLocalizacao();
         Page<Empresa> resultado = empresaRepository.buscar(
-                categoriaId, normalizar(nome), normalizar(cidade), normalizar(uf), pageable);
-        return PageResposta.de(resultado.map(this::converterSimples));
+                filtro.categoriaId(), normalizar(filtro.nome()), normalizar(filtro.cidade()), normalizar(filtro.uf()),
+                filtro.somenteAbertas(), agora.getDayOfWeek().getValue(), agora.toLocalTime(),
+                porDistancia,
+                porDistancia ? BigDecimal.valueOf(filtro.latitude()) : BigDecimal.ZERO,
+                porDistancia ? BigDecimal.valueOf(filtro.longitude()) : BigDecimal.ZERO,
+                porDistancia ? BigDecimal.valueOf(Geolocalizacao.fatorLongitude(filtro.latitude())) : BigDecimal.ONE,
+                pageable);
+
+        Map<Long, List<HorarioFuncionamento>> horariosPorEmpresa = horarioRepository
+                .findByEmpresaIdIn(resultado.getContent().stream().map(Empresa::getId).toList()).stream()
+                .collect(Collectors.groupingBy(h -> h.getEmpresa().getId()));
+        return PageResposta.de(resultado.map(empresa -> converterSimples(
+                empresa, horariosPorEmpresa.getOrDefault(empresa.getId(), List.of()), agora, filtro)));
     }
 
     @Transactional(readOnly = true)
@@ -123,24 +157,32 @@ public class EmpresaService {
         empresa.setAprovada(false);
         empresa.setDestaque(false);
         empresaRepository.save(empresa);
+        substituirHorarios(empresa, requisicao.horarios());
 
         notificarAdmins("Nova empresa para aprovacao",
                 "A empresa \"" + empresa.getNome() + "\" aguarda aprovacao.");
         return converterCompleto(empresa);
     }
 
+    /**
+     * Alterar o que aparece como conteudo da empresa (nome, categoria, descricoes, contatos, site,
+     * redes) exige nova aprovacao; endereco, localizacao e horarios podem mudar sem moderacao.
+     */
     @Transactional
     public EmpresaDtos.EmpresaResposta atualizar(Long id, Usuario usuario, EmpresaDtos.EmpresaRequest requisicao) {
         Empresa empresa = obter(id);
         verificarProprietario(empresa, usuario);
+        ConteudoModerado conteudoAnterior = ConteudoModerado.de(empresa);
         if (requisicao.categoriaId() != null) {
             Categoria categoria = categoriaRepository.findById(requisicao.categoriaId())
                     .orElseThrow(() -> new RecursoNaoEncontradoException("Categoria nao encontrada."));
             empresa.setCategoria(categoria);
         }
-        boolean estavaAprovada = Boolean.TRUE.equals(empresa.getAprovada());
         aplicarDados(empresa, requisicao);
-        if (estavaAprovada) {
+        substituirHorarios(empresa, requisicao.horarios());
+
+        boolean estavaAprovada = Boolean.TRUE.equals(empresa.getAprovada());
+        if (estavaAprovada && !conteudoAnterior.equals(ConteudoModerado.de(empresa))) {
             empresa.setAprovada(false);
             empresa.setDestaque(false);
             notificarAdmins("Empresa editada, nova aprovacao necessaria",
@@ -169,6 +211,8 @@ public class EmpresaService {
         favoritoRepository.deleteByEmpresaId(empresaId);
         fotoRepository.deleteByEmpresaId(empresaId);
         portfolioRepository.deleteByEmpresaId(empresaId);
+        horarioRepository.deleteByEmpresaId(empresaId);
+        eventoRepository.deleteByEmpresaId(empresaId);
         empresa.marcarComoExcluida();
         empresaRepository.save(empresa);
 
@@ -294,12 +338,44 @@ public class EmpresaService {
     }
 
     private void verificarProprietario(Empresa empresa, Usuario usuario) {
-        if (usuario.getPerfil() == Perfil.ADMIN) {
-            return;
-        }
-        if (!empresa.getUsuario().getId().equals(usuario.getId())) {
+        if (!empresa.podeSerGerenciadaPor(usuario)) {
             throw new NegocioException("Voce nao tem permissao para alterar esta empresa.");
         }
+    }
+
+    /** {@code null} mantem os horarios atuais; uma lista (mesmo vazia) substitui todos. */
+    private void substituirHorarios(Empresa empresa, List<EmpresaDtos.HorarioDto> horarios) {
+        if (horarios == null) {
+            return;
+        }
+        validarHorarios(horarios);
+        horarioRepository.deleteByEmpresaId(empresa.getId());
+        horarioRepository.saveAll(horarios.stream()
+                .map(h -> new HorarioFuncionamento(empresa, h.diaSemana(), h.abre(), h.fecha()))
+                .toList());
+    }
+
+    private void validarHorarios(List<EmpresaDtos.HorarioDto> horarios) {
+        Map<Integer, List<EmpresaDtos.HorarioDto>> porDia = horarios.stream()
+                .collect(Collectors.groupingBy(EmpresaDtos.HorarioDto::diaSemana));
+        for (List<EmpresaDtos.HorarioDto> doDia : porDia.values()) {
+            List<EmpresaDtos.HorarioDto> ordenados = doDia.stream()
+                    .sorted(Comparator.comparing(EmpresaDtos.HorarioDto::abre))
+                    .toList();
+            for (int i = 0; i < ordenados.size(); i++) {
+                EmpresaDtos.HorarioDto atual = ordenados.get(i);
+                if (!atual.fecha().isAfter(atual.abre())) {
+                    throw new NegocioException("O horario de fechamento deve ser depois do de abertura.");
+                }
+                if (i > 0 && atual.abre().isBefore(ordenados.get(i - 1).fecha())) {
+                    throw new NegocioException("Os horarios de um mesmo dia nao podem se sobrepor.");
+                }
+            }
+        }
+    }
+
+    private List<HorarioFuncionamento> horariosDe(Empresa empresa) {
+        return horarioRepository.findByEmpresaIdOrderByDiaSemanaAscAbreAsc(empresa.getId());
     }
 
     private void exigirPremium(Empresa empresa, String mensagem) {
@@ -323,7 +399,6 @@ public class EmpresaService {
         empresa.setUf(r.uf().trim().toUpperCase());
         empresa.setLatitude(r.latitude());
         empresa.setLongitude(r.longitude());
-        empresa.setHorarioFuncionamento(r.horarioFuncionamento());
         empresa.setRedesSociais(r.redesSociais());
         empresa.setSite(r.site());
     }
@@ -337,15 +412,26 @@ public class EmpresaService {
         return valor == null || valor.isBlank() ? null : valor.trim();
     }
 
-    private EmpresaDtos.EmpresaSimplesResposta converterSimples(Empresa empresa) {
+    private EmpresaDtos.EmpresaSimplesResposta converterSimples(
+            Empresa empresa, List<HorarioFuncionamento> horarios, LocalDateTime agora, EmpresaDtos.FiltroBusca filtro) {
+        Double distanciaKm = null;
+        if (filtro.temLocalizacao() && empresa.temLocalizacao()) {
+            double distancia = Geolocalizacao.distanciaKm(filtro.latitude(), filtro.longitude(),
+                    empresa.getLatitude().doubleValue(), empresa.getLongitude().doubleValue());
+            distanciaKm = BigDecimal.valueOf(distancia).setScale(1, RoundingMode.HALF_UP).doubleValue();
+        }
         return new EmpresaDtos.EmpresaSimplesResposta(
                 empresa.getId(),
                 empresa.getNome(),
-                new EmpresaDtos.CategoriaSimplificada(
-                        empresa.getCategoria().getId(), empresa.getCategoria().getNome()),
+                categoriaDe(empresa),
                 urlAbsoluta(empresa.getLogoUrl()),
                 empresa.getCidade(),
                 empresa.getUf(),
+                empresa.getLatitude(),
+                empresa.getLongitude(),
+                distanciaKm,
+                HorarioFuncionamento.algumCobre(horarios, agora),
+                !horarios.isEmpty(),
                 Boolean.TRUE.equals(empresa.getPremiumAtivo()),
                 Boolean.TRUE.equals(empresa.getDestaque()),
                 empresa.isPerfilCompleto(),
@@ -355,6 +441,7 @@ public class EmpresaService {
 
     private EmpresaDtos.EmpresaResposta converterCompleto(Empresa empresa) {
         boolean perfilCompleto = empresa.isPerfilCompleto();
+        List<HorarioFuncionamento> horarios = horariosDe(empresa);
 
         List<EmpresaDtos.FotoResposta> fotos = new ArrayList<>();
         List<EmpresaDtos.PortfolioResposta> portfolios = new ArrayList<>();
@@ -370,8 +457,7 @@ public class EmpresaService {
         return new EmpresaDtos.EmpresaResposta(
                 empresa.getId(),
                 empresa.getNome(),
-                new EmpresaDtos.CategoriaSimplificada(
-                        empresa.getCategoria().getId(), empresa.getCategoria().getNome()),
+                categoriaDe(empresa),
                 empresa.getUsuario().getNome(),
                 empresa.getDescricaoCurta(),
                 perfilCompleto ? empresa.getDescricaoCompleta() : null,
@@ -387,7 +473,10 @@ public class EmpresaService {
                 empresa.getUf(),
                 empresa.getLatitude(),
                 empresa.getLongitude(),
-                perfilCompleto ? empresa.getHorarioFuncionamento() : null,
+                horarios.stream()
+                        .map(h -> new EmpresaDtos.HorarioDto(h.getDiaSemana(), h.getAbre(), h.getFecha()))
+                        .toList(),
+                HorarioFuncionamento.algumCobre(horarios, LocalDateTime.now(relogio)),
                 perfilCompleto ? empresa.getRedesSociais() : null,
                 perfilCompleto ? empresa.getSite() : null,
                 Boolean.TRUE.equals(empresa.getPremiumAtivo()),
@@ -399,6 +488,11 @@ public class EmpresaService {
                 empresa.getTotalAvaliacoes(),
                 fotos,
                 portfolios);
+    }
+
+    private EmpresaDtos.CategoriaSimplificada categoriaDe(Empresa empresa) {
+        Categoria categoria = empresa.getCategoria();
+        return new EmpresaDtos.CategoriaSimplificada(categoria.getId(), categoria.getNome(), categoria.getIcone());
     }
 
     private EmpresaDtos.FotoResposta converterFoto(Foto foto) {
@@ -415,5 +509,36 @@ public class EmpresaService {
     private EmpresaDtos.PortfolioResposta converterPortfolio(Portfolio portfolio) {
         return new EmpresaDtos.PortfolioResposta(
                 portfolio.getId(), portfolio.getTitulo(), portfolio.getDescricao(), portfolio.getUrlMidia());
+    }
+
+    /** Campos exibidos publicamente que passam pela moderacao do administrador. */
+    private record ConteudoModerado(
+            String nome,
+            Long categoriaId,
+            String descricaoCurta,
+            String descricaoCompleta,
+            String telefone,
+            String whatsapp,
+            String emailContato,
+            String redesSociais,
+            String site) {
+
+        static ConteudoModerado de(Empresa empresa) {
+            return new ConteudoModerado(
+                    empresa.getNome(),
+                    empresa.getCategoria().getId(),
+                    textoOuNulo(empresa.getDescricaoCurta()),
+                    textoOuNulo(empresa.getDescricaoCompleta()),
+                    textoOuNulo(empresa.getTelefone()),
+                    textoOuNulo(empresa.getWhatsapp()),
+                    textoOuNulo(empresa.getEmailContato()),
+                    textoOuNulo(empresa.getRedesSociais()),
+                    textoOuNulo(empresa.getSite()));
+        }
+
+        /** O app envia "" para campos vazios; vazio e nulo contam como o mesmo conteudo. */
+        private static String textoOuNulo(String valor) {
+            return Objects.requireNonNullElse(valor, "").isBlank() ? null : valor.trim();
+        }
     }
 }

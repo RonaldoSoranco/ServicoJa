@@ -76,6 +76,7 @@ então sobrevivem a `docker compose down` (mas não a `docker compose down -v`).
 | `APP_BASE_URL` | `http://localhost:8080` | URL pública da API, usada para montar as URLs das fotos/logo enviados |
 | `CIDADE_PADRAO` | `Marau` | Cidade padrão dos novos usuários |
 | `UF_PADRAO` | `RS` | UF padrão dos novos usuários |
+| `FUSO_HORARIO` | `America/Sao_Paulo` | Fuso usado para calcular se a empresa está "aberta agora" |
 | `PORT` | `8080` | Porta do servidor |
 | `UPLOAD_DIR` | `./uploads` | Diretório onde fotos/logo enviados pelos usuários são gravados |
 | `CORS_ALLOWED_ORIGINS` | `*` (vazio em `prod`) | Origens web permitidas por CORS, separadas por vírgula. O app mobile não precisa de CORS; em produção só defina se houver um cliente web (ex.: `https://admin.servicoja.com.br`) |
@@ -96,7 +97,8 @@ então sobrevivem a `docker compose down` (mas não a `docker compose down -v`).
     ```
     Administrador inicial criado (admin@servicoja.com.br) com senha gerada automaticamente: xxxxxxxxxxxxxxxx
     ```
-- **Empresas de exemplo** (senha `senha123`): criadas apenas fora de `prod`.
+- **Empresas de exemplo** (senha `senha123`): criadas apenas fora de `prod`, com localização em
+  Marau e horários de funcionamento (a Hidráulica Marau atende 24 horas, útil para testar "aberto agora").
 
 ## Endpoints principais
 
@@ -128,11 +130,13 @@ então sobrevivem a `docker compose down` (mas não a `docker compose down -v`).
 ### Empresas (`/api/empresas`)
 | Método | Rota | Descrição |
 | --- | --- | --- |
-| GET | `/api/empresas` | Busca com filtros (categoria, nome, cidade, UF) e paginação |
-| GET | `/api/empresas/{id}` | Perfil público da empresa |
+| GET | `/api/empresas` | Busca com filtros (categoria, nome, cidade, UF) e paginação. Com `latitude`/`longitude`, ordena por proximidade e devolve `distanciaKm`; com `abertas=true`, só traz quem está aberto agora |
+| GET | `/api/empresas/{id}` | Perfil público da empresa (inclui `horarios` e `abertoAgora`) |
+| POST | `/api/empresas/{id}/eventos` | Registra visualização ou clique em WhatsApp/ligar/mapa (público; 1 por pessoa a cada 30 min, o dono não conta) |
+| GET | `/api/empresas/{id}/desempenho` | Painel do dono: visualizações e cliques nos últimos 30 dias, comparados aos 30 anteriores |
 | GET | `/api/empresas/minhas` | Empresas do usuário logado |
 | POST | `/api/empresas` | Cadastra empresa (dono) |
-| PUT | `/api/empresas/{id}` | Atualiza empresa (dono). O logo não faz parte deste corpo |
+| PUT | `/api/empresas/{id}` | Atualiza empresa (dono). O logo não faz parte deste corpo. `horarios` é uma lista de `{diaSemana (1=segunda..7=domingo), abre, fecha}` em `HH:mm`. Mudar nome, categoria, descrições, contatos, site ou redes faz a empresa voltar para análise; horários, endereço e localização não |
 | DELETE | `/api/empresas/{id}` | Exclui empresa (dono): cancela o Premium no Asaas e tira a empresa da plataforma |
 | POST | `/api/empresas/{id}/fotos` | Envia uma foto (multipart/form-data, exige Premium) |
 | DELETE | `/api/empresas/{id}/fotos/{fotoId}` | Remove foto do portfolio |
