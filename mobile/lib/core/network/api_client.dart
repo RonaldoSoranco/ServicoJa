@@ -72,7 +72,12 @@ class ApiClient {
       autenticado: autenticado,
       construir: (headers) {
         final request = http.Request(metodo, uri)..headers.addAll(headers);
-        if (corpo != null) request.body = jsonEncode(corpo);
+        if (corpo != null) {
+          // O Content-Type precisa vir antes do corpo: ao receber o corpo sem um tipo
+          // definido, o pacote http marca a requisicao como text/plain, e a API recusa (415).
+          request.headers['Content-Type'] = 'application/json';
+          request.body = jsonEncode(corpo);
+        }
         return request;
       },
     );
@@ -91,11 +96,7 @@ class ApiClient {
 
     http.Response resposta;
     try {
-      final request = construir(headers);
-      if (request is http.Request) {
-        request.headers.putIfAbsent('Content-Type', () => 'application/json');
-      }
-      final streamed = await _client.send(request);
+      final streamed = await _client.send(construir(headers));
       resposta = await http.Response.fromStream(streamed);
     } on Exception {
       throw ApiException.semConexao();
