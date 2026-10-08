@@ -11,7 +11,7 @@ void main() {
           body: FotosSecao(
             premiumAtivo: false,
             fotos: const [],
-            aoAdicionar: (_, __, ___) async {},
+            aoAdicionar: (_, _, _) async {},
             aoRemover: (_) async {},
           ),
         ),
@@ -30,7 +30,7 @@ void main() {
           body: FotosSecao(
             premiumAtivo: true,
             fotos: const [],
-            aoAdicionar: (_, __, ___) async {},
+            aoAdicionar: (_, _, _) async {},
             aoRemover: (_) async {},
           ),
         ),

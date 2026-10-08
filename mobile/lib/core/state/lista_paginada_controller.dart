@@ -12,7 +12,7 @@ typedef BuscaPagina<T> = Future<PaginaResposta<T>> Function(int pagina, int tama
 /// `erro`, `temMais`, `carregarInicial()`, `carregarMais()`, `atualizar()` e
 /// `reiniciar(novaBusca)` para quando os filtros de busca mudam.
 class ListaPaginadaController<T> extends ChangeNotifier {
-  ListaPaginadaController({required BuscaPagina<T> buscar, this.tamanhoPagina = 20}) : _buscar = buscar;
+  ListaPaginadaController({required this._buscar, this.tamanhoPagina = 20});
 
   BuscaPagina<T> _buscar;
   final int tamanhoPagina;

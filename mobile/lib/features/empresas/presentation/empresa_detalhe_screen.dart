@@ -209,7 +209,7 @@ class _EmpresaDetalheScreenState extends State<EmpresaDetalheScreen> {
                   width: 72,
                   height: 72,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _logoPlaceholder(),
+                  errorBuilder: (_, _, _) => _logoPlaceholder(),
                 )
               : _logoPlaceholder(),
         ),
@@ -318,7 +318,7 @@ class _EmpresaDetalheScreenState extends State<EmpresaDetalheScreen> {
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: empresa.fotos.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (context, i) {
             final foto = empresa.fotos[i];
             return ClipRRect(
@@ -328,7 +328,7 @@ class _EmpresaDetalheScreenState extends State<EmpresaDetalheScreen> {
                 width: 90,
                 height: 90,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, _, _) => Container(
                   width: 90,
                   height: 90,
                   color: Colors.grey.shade100,
@@ -365,7 +365,7 @@ class _EmpresaDetalheScreenState extends State<EmpresaDetalheScreen> {
                               p.urlMidia!,
                               height: 120,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
+                              errorBuilder: (_, _, _) => Container(
                                 height: 120,
                                 color: Colors.grey.shade100,
                                 child: const Icon(Icons.broken_image_outlined, color: Colors.black26),
