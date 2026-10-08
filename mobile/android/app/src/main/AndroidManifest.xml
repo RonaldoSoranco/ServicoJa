@@ -3,8 +3,11 @@
     <!-- Necessaria para selecionar fotos da galeria em versoes anteriores ao Android 13
          (a partir do Android 13 o seletor de fotos do sistema nao exige esta permissao). -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <!-- Usadas so enquanto o app esta aberto: "perto de mim" e marcar a localizacao da empresa. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <application
-        android:label="servicoja_app"
+        android:label="Serviço Já"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

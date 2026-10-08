@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/mapa.dart';
 import '../../categorias/data/categoria_repository.dart';
 import '../../categorias/models/categoria.dart';
 import '../../assinaturas/presentation/assinatura_secao.dart';
 import '../data/empresa_repository.dart';
 import '../models/empresa.dart';
+import '../models/horario.dart';
 import 'destaque_secao.dart';
+import 'editor_horarios.dart';
 import 'fotos_secao.dart';
 import 'portfolio_secao.dart';
+import 'seletor_localizacao_screen.dart';
 
 /// Formulario de cadastro/edicao de empresa (Fase 6).
 ///
@@ -42,13 +48,12 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
   late final TextEditingController _bairroController;
   late final TextEditingController _cidadeController;
   late final TextEditingController _ufController;
-  late final TextEditingController _latitudeController;
-  late final TextEditingController _longitudeController;
-  late final TextEditingController _horarioController;
   late final TextEditingController _redesSociaisController;
   late final TextEditingController _siteController;
 
   int? _categoriaId;
+  LatLng? _localizacao;
+  List<Horario> _horarios = [];
   bool _salvando = false;
   Empresa? _empresaAtual;
 
@@ -73,9 +78,8 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
     _bairroController = TextEditingController(text: e?.bairro ?? '');
     _cidadeController = TextEditingController(text: e?.cidade ?? 'Marau');
     _ufController = TextEditingController(text: e?.uf ?? 'RS');
-    _latitudeController = TextEditingController(text: e?.latitude?.toString() ?? '');
-    _longitudeController = TextEditingController(text: e?.longitude?.toString() ?? '');
-    _horarioController = TextEditingController(text: e?.horarioFuncionamento ?? '');
+    _localizacao = (e != null && e.temLocalizacao) ? LatLng(e.latitude!, e.longitude!) : null;
+    _horarios = [...?e?.horarios];
     _redesSociaisController = TextEditingController(text: e?.redesSociais ?? '');
     _siteController = TextEditingController(text: e?.site ?? '');
   }
@@ -94,9 +98,6 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
     _bairroController.dispose();
     _cidadeController.dispose();
     _ufController.dispose();
-    _latitudeController.dispose();
-    _longitudeController.dispose();
-    _horarioController.dispose();
     _redesSociaisController.dispose();
     _siteController.dispose();
     super.dispose();
@@ -119,18 +120,18 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione uma categoria.')));
       return;
     }
-    if (_editando && _empresaAtual!.aprovada) {
+    if (_editando && _empresaAtual!.aprovada && _alterouConteudoModerado()) {
       final confirmar = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Editar empresa aprovada'),
+          title: const Text('Enviar para nova análise?'),
           content: const Text(
-            'Sua empresa esta aprovada e visivel nas buscas. Ao salvar essa edicao, ela volta para analise '
-            'e some da busca ate ser aprovada novamente pelo administrador. Deseja continuar?',
+            'Você alterou nome, categoria, descrição ou contatos. Sua empresa sai da busca até o administrador '
+            'aprovar de novo. Horários, endereço e localização podem ser alterados sem nova análise.',
           ),
           actions: [
             TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Continuar e salvar')),
+            FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Salvar mesmo assim')),
           ],
         ),
       );
@@ -152,23 +153,25 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
       bairro: _bairroController.text.trim(),
       cidade: _cidadeController.text.trim(),
       uf: _ufController.text.trim().toUpperCase(),
-      latitude: double.tryParse(_latitudeController.text.trim().replaceAll(',', '.')),
-      longitude: double.tryParse(_longitudeController.text.trim().replaceAll(',', '.')),
-      horarioFuncionamento: _horarioController.text.trim(),
+      latitude: _localizacao?.latitude,
+      longitude: _localizacao?.longitude,
+      horarios: _horarios,
       redesSociais: _redesSociaisController.text.trim(),
       site: _siteController.text.trim(),
     );
+    final criando = !_editando;
     try {
-      final resultado = _editando
-          ? await _repositorio.atualizar(_empresaAtual!.id, payload)
-          : await _repositorio.criar(payload);
+      final resultado = criando
+          ? await _repositorio.criar(payload)
+          : await _repositorio.atualizar(_empresaAtual!.id, payload);
       if (!mounted) return;
+      // Depois de criar, continua na tela para a empresa enviar o logo e ver as secoes Premium.
       setState(() => _empresaAtual = resultado);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Empresa salva com sucesso.')));
-      if (!_editando) {
-        // Depois de criar, volta para a lista (que vai recarregar via /minhas).
-        Navigator.of(context).pop(true);
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(criando
+            ? 'Empresa cadastrada! Envie o logo e ela aparece na busca depois da aprovação.'
+            : 'Empresa salva com sucesso.'),
+      ));
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } catch (_) {
@@ -276,11 +279,11 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                           children: [
                             Icon(Icons.hourglass_top, color: Colors.orange),
                             SizedBox(width: 8),
-                            Expanded(child: Text('Esta empresa esta pendente de aprovacao do administrador.')),
+                            Expanded(child: Text('Esta empresa está aguardando a aprovação do administrador.')),
                           ],
                         ),
                       ),
-                    _tituloSecao('Dados basicos'),
+                    _tituloSecao('Dados básicos'),
                     TextFormField(
                       controller: _nomeController,
                       decoration: const InputDecoration(labelText: 'Nome da empresa'),
@@ -303,13 +306,13 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                     TextFormField(
                       controller: _descricaoCurtaController,
                       maxLength: 255,
-                      decoration: const InputDecoration(labelText: 'Descricao curta (aparece na lista de busca)'),
+                      decoration: const InputDecoration(labelText: 'Descrição curta (aparece na busca)'),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _descricaoCompletaController,
                       maxLines: 4,
-                      decoration: const InputDecoration(labelText: 'Descricao completa', alignLabelWithHint: true),
+                      decoration: const InputDecoration(labelText: 'Descrição completa', alignLabelWithHint: true),
                     ),
                     const SizedBox(height: 16),
                     _CampoLogo(
@@ -336,7 +339,7 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                       keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(labelText: 'E-mail de contato'),
                     ),
-                    _tituloSecao('Endereco'),
+                    _tituloSecao('Endereço'),
                     TextFormField(
                       controller: _cepController,
                       decoration: const InputDecoration(labelText: 'CEP'),
@@ -344,7 +347,7 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _enderecoController,
-                      decoration: const InputDecoration(labelText: 'Endereco (rua/avenida)'),
+                      decoration: const InputDecoration(labelText: 'Endereço (rua/avenida)'),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -352,7 +355,7 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                         Expanded(
                           child: TextFormField(
                             controller: _numeroController,
-                            decoration: const InputDecoration(labelText: 'Numero'),
+                            decoration: const InputDecoration(labelText: 'Número'),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -383,42 +386,21 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                             maxLength: 2,
                             textCapitalization: TextCapitalization.characters,
                             decoration: const InputDecoration(labelText: 'UF', counterText: ''),
-                            validator: (v) => (v == null || v.trim().length != 2) ? 'UF invalida.' : null,
+                            validator: (v) => (v == null || v.trim().length != 2) ? 'UF inválida.' : null,
                           ),
                         ),
                       ],
                     ),
-                    _tituloSecao('Avancado (opcional)'),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _latitudeController,
-                            keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
-                            decoration: const InputDecoration(labelText: 'Latitude'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _longitudeController,
-                            keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
-                            decoration: const InputDecoration(labelText: 'Longitude'),
-                          ),
-                        ),
-                      ],
+                    _tituloSecao('Localização no mapa'),
+                    _campoLocalizacao(),
+                    _tituloSecao('Horário de funcionamento'),
+                    const Text(
+                      'Com os horários preenchidos, sua empresa mostra "Aberto agora" para os clientes.',
+                      style: TextStyle(color: AppCores.textoSecundario),
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _horarioController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Horario de funcionamento',
-                        alignLabelWithHint: true,
-                        hintText: 'Ex.: Seg a sex, 8h as 18h',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
+                    EditorHorarios(horarios: _horarios, aoAlterar: (novos) => setState(() => _horarios = novos)),
+                    _tituloSecao('Redes sociais e site'),
                     TextFormField(
                       controller: _redesSociaisController,
                       maxLines: 3,
@@ -435,7 +417,7 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                       child: _salvando
                           ? const SizedBox(
                               height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(_editando ? 'Salvar alteracoes' : 'Cadastrar empresa'),
+                          : Text(_editando ? 'Salvar alterações' : 'Cadastrar empresa'),
                     ),
                     if (_editando) ...[
                       _tituloSecao('Assinatura Premium'),
@@ -447,7 +429,7 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                         aoAdicionar: _adicionarFoto,
                         aoRemover: _removerFoto,
                       ),
-                      _tituloSecao('Portfolio'),
+                      _tituloSecao('Portfólio'),
                       PortfolioSecao(
                         premiumAtivo: _empresaAtual!.premiumAtivo,
                         portfolios: _empresaAtual!.portfolios,
@@ -474,10 +456,65 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
     );
   }
 
+  /// Mesmos campos que o backend modera: mudar qualquer um deles tira a empresa da busca.
+  bool _alterouConteudoModerado() {
+    final e = _empresaAtual!;
+    bool mudou(TextEditingController c, String? original) => c.text.trim() != (original ?? '').trim();
+    return _categoriaId != e.categoria.id ||
+        mudou(_nomeController, e.nome) ||
+        mudou(_descricaoCurtaController, e.descricaoCurta) ||
+        mudou(_descricaoCompletaController, e.descricaoCompleta) ||
+        mudou(_telefoneController, e.telefone) ||
+        mudou(_whatsappController, e.whatsapp) ||
+        mudou(_emailContatoController, e.emailContato) ||
+        mudou(_redesSociaisController, e.redesSociais) ||
+        mudou(_siteController, e.site);
+  }
+
+  Future<void> _escolherLocalizacao() async {
+    final escolhida = await Navigator.of(context).push<LatLng>(
+      MaterialPageRoute(builder: (_) => SeletorLocalizacaoScreen(inicial: _localizacao)),
+    );
+    if (escolhida != null) setState(() => _localizacao = escolhida);
+  }
+
+  Widget _campoLocalizacao() {
+    if (_localizacao == null) {
+      return OutlinedButton.icon(
+        onPressed: _escolherLocalizacao,
+        icon: const Icon(Icons.add_location_alt_outlined, color: AppCores.laranja),
+        label: const Text('Marcar a empresa no mapa'),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MapaPrevia(ponto: _localizacao!, altura: 150, aoTocar: _escolherLocalizacao),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextButton.icon(
+                onPressed: _escolherLocalizacao,
+                icon: const Icon(Icons.edit_location_alt_outlined),
+                label: const Text('Alterar no mapa'),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _localizacao = null),
+              style: TextButton.styleFrom(foregroundColor: AppCores.textoSecundario),
+              child: const Text('Remover'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _tituloSecao(String titulo) {
     return Padding(
-      padding: const EdgeInsets.only(top: 24, bottom: 12),
-      child: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      padding: const EdgeInsets.only(top: 28, bottom: 12),
+      child: Text(titulo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
     );
   }
 }
@@ -503,7 +540,7 @@ class _CampoLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!habilitado) {
       return const Text(
-        'Voce podera enviar o logo depois de cadastrar a empresa.',
+        'Você poderá enviar o logo depois de cadastrar a empresa.',
         style: TextStyle(color: Colors.black54),
       );
     }

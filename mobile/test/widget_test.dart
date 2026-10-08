@@ -18,6 +18,7 @@ void main() {
 
     expect(find.text('Entrar'), findsWidgets);
     expect(find.byType(TextFormField), findsNWidgets(2));
-    expect(find.text('Ainda nao tem conta? Cadastre-se'), findsOneWidget);
+    expect(find.text('Ainda não tem conta? Cadastre-se', findRichText: true), findsOneWidget);
+    expect(find.text('Serviço Já'), findsOneWidget);
   });
 }

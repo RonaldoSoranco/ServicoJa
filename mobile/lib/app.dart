@@ -17,7 +17,7 @@ class ServicoJaApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => NotificacaoBadgeController()),
       ],
       child: MaterialApp(
-        title: 'Servico Ja',
+        title: 'Serviço Já',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.claro(),
         home: const AuthGate(),

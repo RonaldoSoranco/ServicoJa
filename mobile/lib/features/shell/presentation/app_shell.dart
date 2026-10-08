@@ -58,7 +58,7 @@ class _AppShellState extends State<AppShell> {
             tela: FavoritosScreen(),
           ),
         ItemNavegacao(
-          rotulo: 'Notificacoes',
+          rotulo: 'Notificações',
           icone: Consumer<NotificacaoBadgeController>(
             builder: (context, badge, _) {
               final icone = const Icon(Icons.notifications_outlined);

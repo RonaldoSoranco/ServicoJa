@@ -1,5 +1,6 @@
 import '../../../core/network/api_client.dart';
 import '../../../core/network/pagina_resposta.dart';
+import '../models/desempenho.dart';
 import '../models/empresa.dart';
 import '../models/empresa_simples.dart';
 
@@ -8,11 +9,16 @@ class EmpresaRepository {
 
   final ApiClient _apiClient;
 
+  /// Com [latitude]/[longitude] (posição de quem busca), os resultados vêm ordenados por
+  /// proximidade e com a distância de cada empresa; [somenteAbertas] filtra quem está aberto agora.
   Future<PaginaResposta<EmpresaSimples>> buscar({
     int? categoriaId,
     String? nome,
     String? cidade,
     String? uf,
+    double? latitude,
+    double? longitude,
+    bool somenteAbertas = false,
     required int pagina,
     required int tamanho,
   }) async {
@@ -23,6 +29,8 @@ class EmpresaRepository {
       if (nome != null && nome.trim().isNotEmpty) 'nome': nome.trim(),
       if (cidade != null && cidade.trim().isNotEmpty) 'cidade': cidade.trim(),
       if (uf != null && uf.trim().isNotEmpty) 'uf': uf.trim(),
+      if (latitude != null && longitude != null) ...{'latitude': '$latitude', 'longitude': '$longitude'},
+      if (somenteAbertas) 'abertas': 'true',
     };
     final json = await _apiClient.get('/api/empresas', query: query) as Map<String, dynamic>;
     return PaginaResposta.fromJson(json, EmpresaSimples.fromJson);
@@ -113,5 +121,20 @@ class EmpresaRepository {
     final json =
         await _apiClient.delete('/api/empresas/$empresaId/destaque', autenticado: true) as Map<String, dynamic>;
     return json['mensagem'] as String? ?? 'Destaque removido.';
+  }
+
+  /// Registra uma interação para o painel da empresa. Falhas são ignoradas: a estatística
+  /// nunca pode atrapalhar quem está tentando falar com a empresa.
+  Future<void> registrarEvento(int empresaId, TipoEvento tipo) async {
+    try {
+      await _apiClient.post('/api/empresas/$empresaId/eventos', corpo: {'tipo': tipo.valor}, autenticado: true);
+    } catch (_) {
+      // Silencioso de propósito.
+    }
+  }
+
+  Future<Desempenho> desempenho(int empresaId) async {
+    final json = await _apiClient.get('/api/empresas/$empresaId/desempenho', autenticado: true) as Map<String, dynamic>;
+    return Desempenho.fromJson(json);
   }
 }

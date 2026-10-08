@@ -16,6 +16,7 @@ class ListaPaginadaView<T> extends StatefulWidget {
     this.rotuloAcaoVazia,
     this.padding,
     this.cabecalho,
+    this.topoDaLista,
   });
 
   final ListaPaginadaController<T> controller;
@@ -29,6 +30,9 @@ class ListaPaginadaView<T> extends StatefulWidget {
   /// Widget fixo exibido acima da lista (ex.: filtros), some no estado vazio/erro tambem
   /// se o chamador optar por incluir a logica de filtro dentro do proprio cabecalho.
   final Widget? cabecalho;
+
+  /// Conteúdo exibido antes do primeiro item, rolando junto com a lista (ex.: destaques).
+  final Widget? topoDaLista;
 
   @override
   State<ListaPaginadaView<T>> createState() => _ListaPaginadaViewState<T>();
@@ -76,20 +80,23 @@ class _ListaPaginadaViewState<T> extends State<ListaPaginadaView<T>> {
             rotuloAcao: widget.rotuloAcaoVazia,
           );
         } else {
+          final deslocamento = widget.topoDaLista == null ? 0 : 1;
           corpo = RefreshIndicator(
             onRefresh: controller.atualizar,
             child: ListView.builder(
               controller: _scrollController,
               padding: widget.padding ?? const EdgeInsets.all(16),
-              itemCount: controller.itens.length + (controller.temMais ? 1 : 0),
+              itemCount: deslocamento + controller.itens.length + (controller.temMais ? 1 : 0),
               itemBuilder: (context, index) {
-                if (index >= controller.itens.length) {
+                if (index < deslocamento) return widget.topoDaLista!;
+                final indiceItem = index - deslocamento;
+                if (indiceItem >= controller.itens.length) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),
                     child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
                   );
                 }
-                return widget.construirItem(context, controller.itens[index], index);
+                return widget.construirItem(context, controller.itens[indiceItem], indiceItem);
               },
             ),
           );

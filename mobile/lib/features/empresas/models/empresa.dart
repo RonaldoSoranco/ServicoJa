@@ -1,4 +1,5 @@
 import 'empresa_simples.dart';
+import 'horario.dart';
 
 class Foto {
   Foto({required this.id, required this.url, this.descricao, this.ordem});
@@ -57,7 +58,8 @@ class Empresa {
     required this.uf,
     this.latitude,
     this.longitude,
-    this.horarioFuncionamento,
+    required this.horarios,
+    required this.abertoAgora,
     this.redesSociais,
     this.site,
     required this.premiumAtivo,
@@ -91,7 +93,10 @@ class Empresa {
       uf: json['uf'] as String,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
-      horarioFuncionamento: json['horarioFuncionamento'] as String?,
+      horarios: (json['horarios'] as List<dynamic>? ?? const [])
+          .map((e) => Horario.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      abertoAgora: json['abertoAgora'] as bool? ?? false,
       redesSociais: json['redesSociais'] as String?,
       site: json['site'] as String?,
       premiumAtivo: json['premiumAtivo'] as bool? ?? false,
@@ -128,7 +133,8 @@ class Empresa {
   final String uf;
   final double? latitude;
   final double? longitude;
-  final String? horarioFuncionamento;
+  final List<Horario> horarios;
+  final bool abertoAgora;
   final String? redesSociais;
   final String? site;
   final bool premiumAtivo;
@@ -140,6 +146,8 @@ class Empresa {
   final int? totalAvaliacoes;
   final List<Foto> fotos;
   final List<Portfolio> portfolios;
+
+  bool get temLocalizacao => latitude != null && longitude != null;
 }
 
 /// Corpo de `POST/PUT /api/empresas` — usado pelo formulario de cadastro/edicao.
@@ -161,7 +169,7 @@ class EmpresaRequestPayload {
     required this.uf,
     this.latitude,
     this.longitude,
-    this.horarioFuncionamento,
+    this.horarios,
     this.redesSociais,
     this.site,
   });
@@ -181,7 +189,9 @@ class EmpresaRequestPayload {
   final String uf;
   final double? latitude;
   final double? longitude;
-  final String? horarioFuncionamento;
+
+  /// `null` mantém os horários atuais; lista vazia remove todos.
+  final List<Horario>? horarios;
   final String? redesSociais;
   final String? site;
 
@@ -202,7 +212,7 @@ class EmpresaRequestPayload {
       'uf': uf,
       'latitude': latitude,
       'longitude': longitude,
-      'horarioFuncionamento': horarioFuncionamento ?? '',
+      if (horarios != null) 'horarios': horarios!.map((h) => h.toJson()).toList(),
       'redesSociais': redesSociais ?? '',
       'site': site ?? '',
     };

@@ -54,6 +54,24 @@ permissão extra); em versões mais antigas é necessária a permissão
 `READ_EXTERNAL_STORAGE`, já declarada no `AndroidManifest.xml`. No iOS, o acesso à
 galeria exige `NSPhotoLibraryUsageDescription`, já declarada no `Info.plist`.
 
+## Mapa e localização
+
+Os mapas usam o OpenStreetMap (`flutter_map`), sem chave de API. A localização do aparelho
+(`geolocator`) só é pedida quando a pessoa toca em **Perto de mim** ou marca a empresa no
+mapa; as permissões já estão declaradas no `AndroidManifest.xml` e no `Info.plist`. Os
+botões "Como chegar" e "Abrir no Maps" abrem a rota no Google Maps.
+
+## Identidade visual
+
+Paleta, tipografia (Plus Jakarta Sans, via `google_fonts`) e componentes ficam em
+`lib/core/theme/app_theme.dart` e `lib/core/widgets/`. O logo é desenhado em código
+(`LogoServicoJa`); os ícones do app saem da mesma geometria:
+
+```bash
+python3 tool/gerar_icones.py
+dart run flutter_launcher_icons
+```
+
 ## Exclusão de conta
 
 Clientes e empresas podem excluir a própria conta em **Perfil → Excluir conta**
