@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -99,8 +100,23 @@ public class HandlerGlobalExcecoes {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErroResposta> inesperada(Exception ex) {
+        if (ex instanceof ErrorResponse erroDoSpringMvc) {
+            return erroDeRequisicao(erroDoSpringMvc);
+        }
         LOGGER.error("Erro inesperado na API", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErroResposta.de(500, "ERRO_INTERNO", "Ocorreu um erro inesperado. Tente novamente."));
+    }
+
+    /**
+     * Excecoes do proprio Spring MVC (rota ou arquivo inexistente, metodo HTTP nao suportado,
+     * parametro ausente...) ja trazem o status HTTP correto: sao erros do cliente, nao falhas da API.
+     */
+    private ResponseEntity<ErroResposta> erroDeRequisicao(ErrorResponse erro) {
+        int status = erro.getStatusCode().value();
+        ErroResposta corpo = status == HttpStatus.NOT_FOUND.value()
+                ? ErroResposta.de(status, "NAO_ENCONTRADO", "Recurso nao encontrado.")
+                : ErroResposta.de(status, "REQUISICAO_INVALIDA", "Requisicao invalida.");
+        return ResponseEntity.status(status).headers(erro.getHeaders()).body(corpo);
     }
 }

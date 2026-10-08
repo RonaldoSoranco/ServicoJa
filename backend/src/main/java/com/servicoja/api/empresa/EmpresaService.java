@@ -1,9 +1,12 @@
 package com.servicoja.api.empresa;
 
+import com.servicoja.api.assinatura.AssinaturaService;
+import com.servicoja.dominio.avaliacao.AvaliacaoRepository;
 import com.servicoja.dominio.categoria.Categoria;
 import com.servicoja.dominio.categoria.CategoriaRepository;
 import com.servicoja.dominio.empresa.Empresa;
 import com.servicoja.dominio.empresa.EmpresaRepository;
+import com.servicoja.dominio.favorito.FavoritoRepository;
 import com.servicoja.dominio.foto.Foto;
 import com.servicoja.dominio.foto.FotoRepository;
 import com.servicoja.dominio.notificacao.TipoNotificacao;
@@ -12,6 +15,7 @@ import com.servicoja.dominio.portfolio.PortfolioRepository;
 import com.servicoja.dominio.usuario.Perfil;
 import com.servicoja.dominio.usuario.Usuario;
 import com.servicoja.dominio.usuario.UsuarioRepository;
+import com.servicoja.infra.AposCommit;
 import com.servicoja.infra.PageResposta;
 import com.servicoja.infra.armazenamento.ArmazenamentoArquivos;
 import com.servicoja.infra.excecao.NegocioException;
@@ -37,7 +41,10 @@ public class EmpresaService {
     private final CategoriaRepository categoriaRepository;
     private final FotoRepository fotoRepository;
     private final PortfolioRepository portfolioRepository;
+    private final AvaliacaoRepository avaliacaoRepository;
+    private final FavoritoRepository favoritoRepository;
     private final UsuarioRepository usuarioRepository;
+    private final AssinaturaService assinaturaService;
     private final NotificacaoService notificacaoService;
     private final ArmazenamentoArquivos armazenamento;
     private final String baseUrl;
@@ -47,7 +54,10 @@ public class EmpresaService {
             CategoriaRepository categoriaRepository,
             FotoRepository fotoRepository,
             PortfolioRepository portfolioRepository,
+            AvaliacaoRepository avaliacaoRepository,
+            FavoritoRepository favoritoRepository,
             UsuarioRepository usuarioRepository,
+            AssinaturaService assinaturaService,
             NotificacaoService notificacaoService,
             ArmazenamentoArquivos armazenamento,
             @Value("${servico-ja.app.base-url}") String baseUrl) {
@@ -55,7 +65,10 @@ public class EmpresaService {
         this.categoriaRepository = categoriaRepository;
         this.fotoRepository = fotoRepository;
         this.portfolioRepository = portfolioRepository;
+        this.avaliacaoRepository = avaliacaoRepository;
+        this.favoritoRepository = favoritoRepository;
         this.usuarioRepository = usuarioRepository;
+        this.assinaturaService = assinaturaService;
         this.notificacaoService = notificacaoService;
         this.armazenamento = armazenamento;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
@@ -81,7 +94,7 @@ public class EmpresaService {
 
     @Transactional(readOnly = true)
     public List<EmpresaDtos.EmpresaResposta> listarMinhas(Usuario usuario) {
-        return empresaRepository.findByUsuarioId(usuario.getId()).stream()
+        return empresaRepository.findByUsuarioIdAndExcluidaEmIsNull(usuario.getId()).stream()
                 .map(this::converterCompleto)
                 .toList();
     }
@@ -140,7 +153,27 @@ public class EmpresaService {
     public void excluir(Long id, Usuario usuario) {
         Empresa empresa = obter(id);
         verificarProprietario(empresa, usuario);
-        empresaRepository.delete(empresa);
+        removerDaPlataforma(empresa);
+    }
+
+    /**
+     * Tira a empresa da plataforma: cancela a assinatura Premium no gateway, apaga avaliacoes,
+     * favoritos, fotos, portfolio e arquivos enviados, e anonimiza o registro, que fica apenas
+     * como historico financeiro. Usado na exclusao da empresa e na exclusao da conta do dono.
+     */
+    @Transactional
+    public void removerDaPlataforma(Empresa empresa) {
+        Long empresaId = empresa.getId();
+        assinaturaService.cancelarAssinaturasDaEmpresa(empresa);
+        avaliacaoRepository.deleteByEmpresaId(empresaId);
+        favoritoRepository.deleteByEmpresaId(empresaId);
+        fotoRepository.deleteByEmpresaId(empresaId);
+        portfolioRepository.deleteByEmpresaId(empresaId);
+        empresa.marcarComoExcluida();
+        empresaRepository.save(empresa);
+
+        String pasta = pastaDaEmpresa(empresa);
+        AposCommit.executar(() -> armazenamento.removerPasta(pasta));
     }
 
     @Transactional
@@ -149,7 +182,7 @@ public class EmpresaService {
         Empresa empresa = obter(id);
         verificarProprietario(empresa, usuario);
         exigirPremium(empresa, "O envio de fotos e exclusivo para empresas Premium.");
-        String caminho = armazenamento.salvar(arquivo, "empresas/" + empresa.getId() + "/fotos");
+        String caminho = armazenamento.salvar(arquivo, pastaDaEmpresa(empresa) + "/fotos");
         Foto foto = new Foto();
         foto.setEmpresa(empresa);
         foto.setUrl(caminho);
@@ -168,7 +201,7 @@ public class EmpresaService {
             throw new NegocioException("A foto pertence a outra empresa.");
         }
         fotoRepository.delete(foto);
-        armazenamento.remover(foto.getUrl());
+        removerArquivoAposCommit(empresa, foto.getUrl());
     }
 
     @Transactional
@@ -176,12 +209,9 @@ public class EmpresaService {
         Empresa empresa = obter(id);
         verificarProprietario(empresa, usuario);
         String logoAntigo = empresa.getLogoUrl();
-        String novoCaminho = armazenamento.salvar(arquivo, "empresas/" + empresa.getId() + "/logo");
-        empresa.setLogoUrl(novoCaminho);
+        empresa.setLogoUrl(armazenamento.salvar(arquivo, pastaDaEmpresa(empresa) + "/logo"));
         empresaRepository.save(empresa);
-        if (logoAntigo != null && logoAntigo.startsWith(PREFIXO_ARQUIVO_LOCAL)) {
-            armazenamento.remover(logoAntigo);
-        }
+        removerArquivoAposCommit(empresa, logoAntigo);
         return converterCompleto(empresa);
     }
 
@@ -246,8 +276,21 @@ public class EmpresaService {
     }
 
     private Empresa obter(Long id) {
-        return empresaRepository.findById(id)
+        return empresaRepository.findByIdAndExcluidaEmIsNull(id)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa nao encontrada."));
+    }
+
+    private String pastaDaEmpresa(Empresa empresa) {
+        return "empresas/" + empresa.getId();
+    }
+
+    /**
+     * Apaga um arquivo enviado so depois do commit e apenas se ele estiver na pasta da propria
+     * empresa: um caminho antigo nunca pode levar a remocao de arquivos de outra empresa.
+     */
+    private void removerArquivoAposCommit(Empresa empresa, String caminho) {
+        String pasta = pastaDaEmpresa(empresa);
+        AposCommit.executar(() -> armazenamento.remover(caminho, pasta));
     }
 
     private void verificarProprietario(Empresa empresa, Usuario usuario) {
@@ -269,7 +312,6 @@ public class EmpresaService {
         empresa.setNome(r.nome().trim());
         empresa.setDescricaoCurta(r.descricaoCurta());
         empresa.setDescricaoCompleta(r.descricaoCompleta());
-        empresa.setLogoUrl(r.logoUrl());
         empresa.setTelefone(r.telefone());
         empresa.setWhatsapp(r.whatsapp());
         empresa.setEmailContato(r.emailContato());

@@ -7,4 +7,6 @@ import java.util.List;
 public interface FotoRepository extends JpaRepository<Foto, Long> {
 
     List<Foto> findByEmpresaIdOrderByOrdemAsc(Long empresaId);
+
+    void deleteByEmpresaId(Long empresaId);
 }

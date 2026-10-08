@@ -28,7 +28,7 @@ public class FavoritoService {
         if (favoritoRepository.existsByUsuarioIdAndEmpresaId(usuario.getId(), empresaId)) {
             throw new NegocioException("Esta empresa ja esta nos seus favoritos.");
         }
-        Empresa empresa = empresaRepository.findById(empresaId)
+        Empresa empresa = empresaRepository.findByIdAndExcluidaEmIsNull(empresaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa nao encontrada."));
         if (!Boolean.TRUE.equals(empresa.getAprovada())) {
             throw new NegocioException("A empresa precisa ser aprovada para ser favoritada.");

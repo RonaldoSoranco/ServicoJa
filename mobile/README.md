@@ -45,14 +45,21 @@ mobile/
 
 O envio de fotos (exclusivo para empresas Premium) e do logo é feito escolhendo uma
 imagem da galeria (`image_picker`) e enviando via `multipart/form-data` para o backend
-(`POST /api/empresas/{id}/fotos` e `POST /api/empresas/{id}/logo}`), que grava o
-arquivo e devolve a URL pública. Não há mais campo de "colar URL da foto" — apenas o
-logo ainda aceita opcionalmente uma URL externa como alternativa ao upload direto.
+(`POST /api/empresas/{id}/fotos` e `POST /api/empresas/{id}/logo`), que grava o
+arquivo e devolve a URL pública. Fotos e logo só entram por upload: não há campo para
+colar uma URL externa. O logo pode ser enviado depois que a empresa é cadastrada.
 
 No Android, o seletor de imagens usa o Photo Picker do sistema (Android 13+, sem
 permissão extra); em versões mais antigas é necessária a permissão
 `READ_EXTERNAL_STORAGE`, já declarada no `AndroidManifest.xml`. No iOS, o acesso à
 galeria exige `NSPhotoLibraryUsageDescription`, já declarada no `Info.plist`.
+
+## Exclusão de conta
+
+Clientes e empresas podem excluir a própria conta em **Perfil → Excluir conta**
+(exigido pela LGPD e pelas lojas App Store/Google Play). O app pede a senha atual,
+chama `POST /api/auth/excluir-conta` e, em caso de sucesso, encerra a sessão. Para
+empresas, as empresas cadastradas saem da plataforma e o Premium é cancelado.
 
 ## Testes
 

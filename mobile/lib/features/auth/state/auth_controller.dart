@@ -89,6 +89,14 @@ class AuthController extends ChangeNotifier {
     });
   }
 
+  Future<bool> excluirConta({required String senha}) {
+    return _executar(() async {
+      await _repositorio.excluirConta(senha: senha);
+      usuario = null;
+      status = StatusAuth.naoAutenticado;
+    });
+  }
+
   Future<void> logout() async {
     carregando = true;
     notifyListeners();

@@ -1,0 +1,14 @@
+# Ajustes aplicados somente com SPRING_PROFILES_ACTIVE=prod (sobrescrevem o application.yml).
+
+springdoc:
+  # A documentacao interativa expoe o mapa completo da API; fica disponivel so fora de producao.
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+servico-ja:
+  cors:
+    # O app mobile nao usa CORS. Em producao nenhuma origem web e liberada, a menos que seja
+    # configurada explicitamente (ex.: CORS_ALLOWED_ORIGINS=https://admin.servicoja.com.br).
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}

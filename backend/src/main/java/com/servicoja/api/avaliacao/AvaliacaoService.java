@@ -53,7 +53,7 @@ public class AvaliacaoService {
             throw new LimiteExcedidoException("Limite de avaliacoes atingido. Tente novamente mais tarde.");
         }
 
-        Empresa empresa = empresaRepository.findById(empresaId)
+        Empresa empresa = empresaRepository.findByIdAndExcluidaEmIsNull(empresaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa nao encontrada."));
         if (!Boolean.TRUE.equals(empresa.getAprovada())) {
             throw new NegocioException("A empresa precisa ser aprovada para receber avaliacoes.");
@@ -128,6 +128,23 @@ public class AvaliacaoService {
                 TipoNotificacao.MODERACAO);
 
         return converter(salva);
+    }
+
+    /**
+     * Apaga todas as avaliacoes feitas pelo usuario (exclusao de conta) e recalcula a media das
+     * empresas em que alguma delas ja estava aprovada, para que a nota publica continue correta.
+     */
+    @Transactional
+    public void removerAvaliacoesDoUsuario(Usuario usuario) {
+        List<Avaliacao> avaliacoes = avaliacaoRepository.findByUsuarioIdOrderByCriadoEmDesc(usuario.getId());
+        List<Empresa> empresasAfetadas = avaliacoes.stream()
+                .filter(avaliacao -> avaliacao.getStatus() == StatusAvaliacao.APROVADA)
+                .map(Avaliacao::getEmpresa)
+                .distinct()
+                .toList();
+        avaliacaoRepository.deleteAll(avaliacoes);
+        avaliacaoRepository.flush();
+        empresasAfetadas.forEach(this::recalcularMedia);
     }
 
     private void recalcularMedia(Empresa empresa) {

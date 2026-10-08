@@ -34,6 +34,10 @@ public class AssinaturaService {
 
     private static final DateTimeFormatter DATA_FORMATO = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
+    /** Assinaturas que ainda geram (ou podem gerar) cobrancas no gateway. */
+    private static final List<StatusAssinatura> STATUS_VIGENTES =
+            List.of(StatusAssinatura.AGUARDANDO_PAGAMENTO, StatusAssinatura.ATIVA, StatusAssinatura.ATRASADA);
+
     private final AssinaturaRepository assinaturaRepository;
     private final PagamentoRepository pagamentoRepository;
     private final EmpresaRepository empresaRepository;
@@ -67,7 +71,7 @@ public class AssinaturaService {
         if (usuario.getPerfil() != Perfil.EMPRESA) {
             throw new NegocioException("Apenas empresas podem contratar a assinatura Premium.");
         }
-        Empresa empresa = empresaRepository.findById(requisicao.empresaId())
+        Empresa empresa = empresaRepository.findByIdAndExcluidaEmIsNull(requisicao.empresaId())
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa nao encontrada."));
         if (!empresa.getUsuario().getId().equals(usuario.getId())) {
             throw new NegocioException("Voce nao pode assinar a assinatura desta empresa.");
@@ -147,9 +151,25 @@ public class AssinaturaService {
         return new AssinaturaDtos.MensagemResposta("Assinatura cancelada. O destaque da empresa foi removido imediatamente.");
     }
 
+    /**
+     * Cancela no gateway e localmente toda assinatura vigente ou pendente da empresa, para que
+     * nenhuma cobranca continue sendo gerada depois que ela sai da plataforma. Se o gateway
+     * recusar o cancelamento, a excecao interrompe a exclusao inteira.
+     */
+    @Transactional
+    public void cancelarAssinaturasDaEmpresa(Empresa empresa) {
+        for (Assinatura assinatura : assinaturaRepository.findByEmpresaIdAndStatusIn(empresa.getId(), STATUS_VIGENTES)) {
+            if (assinatura.getAsaasAssinaturaId() != null) {
+                asaasCliente.cancelarAssinatura(assinatura.getAsaasAssinaturaId());
+            }
+            desativarPremium(assinatura, StatusAssinatura.CANCELADA,
+                    "A assinatura Premium de \"" + empresa.getNome() + "\" foi cancelada porque a empresa foi excluida.");
+        }
+    }
+
     @Transactional
     public AssinaturaDtos.AssinaturaResposta obterAssinaturaAtiva(Usuario usuario, Long empresaId) {
-        Empresa empresa = empresaRepository.findById(empresaId)
+        Empresa empresa = empresaRepository.findByIdAndExcluidaEmIsNull(empresaId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa nao encontrada."));
         if (usuario.getPerfil() != Perfil.ADMIN
                 && !empresa.getUsuario().getId().equals(usuario.getId())) {

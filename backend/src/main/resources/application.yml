@@ -33,8 +33,11 @@ spring:
 
 server:
   port: ${PORT:8080}
-  error:
-    include-message: always
+  # Atras de um proxy reverso/load balancer (Render, Railway, nginx...), usa o IP real do cliente
+  # enviado em X-Forwarded-For, que e a base dos limites de requisicoes por IP. O Tomcat so aceita
+  # esse cabecalho quando a conexao vem de um proxy interno (loopback ou rede privada), entao um
+  # cliente externo nao consegue forjar o proprio IP.
+  forward-headers-strategy: native
 
 management:
   endpoints:
@@ -56,9 +59,9 @@ servico-ja:
     expiracao-acesso-min: ${JWT_EXPIRACAO_ACESSO_MIN:60}
     expiracao-refresh-dias: ${JWT_EXPIRACAO_REFRESH_DIAS:30}
   asaas:
-    url: ${ASAAS_URL:https://sandbox.asaas.com}
+    url: ${ASAAS_URL:https://api-sandbox.asaas.com}
     api-key: ${ASAAS_API_KEY:}
-    webhook-segredo: ${ASAAS_WEBHOOK_SEGREDO:}
+    webhook-token: ${ASAAS_WEBHOOK_TOKEN:}
     valor-mensal: ${ASAAS_VALOR_MENSAL:49.90}
     valor-anual: ${ASAAS_VALOR_ANUAL:479.00}
   app:

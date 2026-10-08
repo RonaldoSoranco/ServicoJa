@@ -143,13 +143,13 @@ class Empresa {
 }
 
 /// Corpo de `POST/PUT /api/empresas` — usado pelo formulario de cadastro/edicao.
+/// O logo nao faz parte dele: e enviado separadamente, por upload.
 class EmpresaRequestPayload {
   EmpresaRequestPayload({
     required this.nome,
     required this.categoriaId,
     this.descricaoCurta,
     this.descricaoCompleta,
-    this.logoUrl,
     this.telefone,
     this.whatsapp,
     this.emailContato,
@@ -170,7 +170,6 @@ class EmpresaRequestPayload {
   final int categoriaId;
   final String? descricaoCurta;
   final String? descricaoCompleta;
-  final String? logoUrl;
   final String? telefone;
   final String? whatsapp;
   final String? emailContato;
@@ -192,7 +191,6 @@ class EmpresaRequestPayload {
       'categoriaId': categoriaId,
       'descricaoCurta': descricaoCurta ?? '',
       'descricaoCompleta': descricaoCompleta ?? '',
-      'logoUrl': logoUrl ?? '',
       'telefone': telefone ?? '',
       'whatsapp': whatsapp ?? '',
       'emailContato': emailContato ?? '',

@@ -1,5 +1,6 @@
 package com.servicoja.api.auth;
 
+import com.servicoja.infra.seguranca.UsuarioAtual;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,9 +16,13 @@ public class AuthController {
     private static final String CACHE_CONTROL_NO_STORE = "no-store";
 
     private final AuthService authService;
+    private final ExclusaoContaService exclusaoContaService;
+    private final UsuarioAtual usuarioAtual;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, ExclusaoContaService exclusaoContaService, UsuarioAtual usuarioAtual) {
         this.authService = authService;
+        this.exclusaoContaService = exclusaoContaService;
+        this.usuarioAtual = usuarioAtual;
     }
 
     @PostMapping("/cadastro/cliente")
@@ -84,6 +89,12 @@ public class AuthController {
     @GetMapping("/me")
     public AuthDtos.UsuarioResposta obterUsuarioAtual() {
         return authService.obterUsuarioAtual();
+    }
+
+    @PostMapping("/excluir-conta")
+    public AuthDtos.MensagemResposta excluirConta(@Valid @RequestBody AuthDtos.ExcluirContaRequest requisicao) {
+        exclusaoContaService.excluir(usuarioAtual.obter(), requisicao);
+        return new AuthDtos.MensagemResposta("Conta excluida com sucesso.");
     }
 
     private void bloquearCache(HttpServletResponse response) {

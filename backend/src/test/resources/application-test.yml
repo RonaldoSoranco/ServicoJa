@@ -14,3 +14,5 @@ spring:
 servico-ja:
   upload:
     diretorio: ${java.io.tmpdir}/servicoja-uploads-teste
+  asaas:
+    webhook-token: token-do-webhook-usado-apenas-nos-testes

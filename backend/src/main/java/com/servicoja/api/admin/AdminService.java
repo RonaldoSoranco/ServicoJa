@@ -35,11 +35,11 @@ public class AdminService {
     @Transactional(readOnly = true)
     public AdminDtos.EstatisticasResposta estatisticas() {
         return new AdminDtos.EstatisticasResposta(
-                usuarioRepository.count(),
-                usuarioRepository.countByPerfil(Perfil.CLIENTE),
-                empresaRepository.count(),
+                usuarioRepository.countByExcluidoEmIsNull(),
+                usuarioRepository.countByPerfilAndExcluidoEmIsNull(Perfil.CLIENTE),
+                empresaRepository.countByExcluidaEmIsNull(),
                 empresaRepository.countByPremiumAtivoTrue(),
-                empresaRepository.countByAprovadaFalse(),
+                empresaRepository.countByAprovadaFalseAndExcluidaEmIsNull(),
                 avaliacaoRepository.countByStatus(StatusAvaliacao.PENDENTE),
                 avaliacaoRepository.countByStatus(StatusAvaliacao.APROVADA),
                 avaliacaoRepository.count());
@@ -48,7 +48,7 @@ public class AdminService {
     @Transactional(readOnly = true)
     public PageResposta<AdminDtos.UsuarioAdminResposta> listarUsuarios(int pagina, int tamanho) {
         return PageResposta.de(usuarioRepository
-                .findAll(PageRequest.of(Math.max(pagina, 0), Math.min(Math.max(tamanho, 1), 50)))
+                .findAllByExcluidoEmIsNull(PageRequest.of(Math.max(pagina, 0), Math.min(Math.max(tamanho, 1), 50)))
                 .map(this::converterUsuario));
     }
 

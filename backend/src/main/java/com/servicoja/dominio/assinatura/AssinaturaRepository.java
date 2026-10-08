@@ -3,6 +3,7 @@ package com.servicoja.dominio.assinatura;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface AssinaturaRepository extends JpaRepository<Assinatura, Long> {
@@ -14,4 +15,6 @@ public interface AssinaturaRepository extends JpaRepository<Assinatura, Long> {
     boolean existsByEmpresaIdAndStatus(Long empresaId, StatusAssinatura status);
 
     boolean existsByEmpresaIdAndStatusIn(Long empresaId, Collection<StatusAssinatura> statuses);
+
+    List<Assinatura> findByEmpresaIdAndStatusIn(Long empresaId, Collection<StatusAssinatura> statuses);
 }

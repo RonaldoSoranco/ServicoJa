@@ -16,12 +16,15 @@ public final class EmpresaDtos {
     private EmpresaDtos() {
     }
 
+    /**
+     * Dados editaveis da empresa. O logo nao faz parte deste corpo: ele so pode ser trocado pelo
+     * upload em {@code POST /api/empresas/{id}/logo}, que grava o arquivo na pasta da empresa.
+     */
     public record EmpresaRequest(
             @NotBlank(message = "Informe o nome da empresa.") @Size(max = 150) String nome,
             @NotNull(message = "Informe a categoria.") Long categoriaId,
             @Size(max = 255) String descricaoCurta,
             String descricaoCompleta,
-            @Size(max = 500) String logoUrl,
             @Size(max = 20) @Pattern(regexp = "^$|^[0-9+()\\s-]*$", message = "Telefone invalido.") String telefone,
             @Size(max = 20) @Pattern(regexp = "^$|^[0-9+()\\s-]*$", message = "Whatsapp invalido.") String whatsapp,
             @Size(max = 180) @jakarta.validation.constraints.Email String emailContato,

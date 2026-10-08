@@ -6,6 +6,7 @@ import '../../auth/state/auth_controller.dart';
 import '../../avaliacoes/presentation/minhas_avaliacoes_screen.dart';
 import 'alterar_senha_screen.dart';
 import 'editar_perfil_screen.dart';
+import 'excluir_conta_dialog.dart';
 
 class PerfilScreen extends StatelessWidget {
   const PerfilScreen({super.key});
@@ -35,6 +36,25 @@ class PerfilScreen extends StatelessWidget {
     );
     if (confirmar == true && context.mounted) {
       await context.read<AuthController>().logout();
+    }
+  }
+
+  Future<void> _excluirConta(BuildContext context, Usuario usuario) async {
+    final auth = context.read<AuthController>();
+    final mensageiro = ScaffoldMessenger.of(context);
+    final excluida = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ExcluirContaDialog(
+        possuiEmpresas: usuario.perfil == Perfil.empresa,
+        aoConfirmar: (senha) async {
+          final ok = await auth.excluirConta(senha: senha);
+          return ok ? null : (auth.erro ?? 'Nao foi possivel excluir a conta.');
+        },
+      ),
+    );
+    if (excluida == true) {
+      mensageiro.showSnackBar(const SnackBar(content: Text('Sua conta foi excluida.')));
     }
   }
 
@@ -101,6 +121,14 @@ class PerfilScreen extends StatelessWidget {
             cor: Theme.of(context).colorScheme.error,
             onTap: auth.carregando ? null : () => _confirmarSaida(context),
           ),
+          if (usuario != null && usuario.perfil != Perfil.admin)
+            _item(
+              context,
+              icone: Icons.delete_forever_outlined,
+              titulo: 'Excluir conta',
+              cor: Theme.of(context).colorScheme.error,
+              onTap: auth.carregando ? null : () => _excluirConta(context, usuario),
+            ),
         ],
       ),
     );

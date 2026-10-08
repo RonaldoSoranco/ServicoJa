@@ -9,28 +9,44 @@ import java.util.Arrays;
 @Component
 public class AsaasPropriedades {
 
+    /** Limites exigidos pelo Asaas para o token de autenticacao do webhook. */
+    static final int TAMANHO_MINIMO_TOKEN_WEBHOOK = 32;
+    static final int TAMANHO_MAXIMO_TOKEN_WEBHOOK = 255;
+
     private final String url;
     private final String apiKey;
-    private final String webhookSegredo;
+    private final String webhookToken;
     private final BigDecimal valorMensal;
     private final BigDecimal valorAnual;
 
     public AsaasPropriedades(
             @Value("${servico-ja.asaas.url}") String url,
             @Value("${servico-ja.asaas.api-key}") String apiKey,
-            @Value("${servico-ja.asaas.webhook-segredo}") String webhookSegredo,
+            @Value("${servico-ja.asaas.webhook-token}") String webhookToken,
             @Value("${servico-ja.asaas.valor-mensal}") BigDecimal valorMensal,
             @Value("${servico-ja.asaas.valor-anual}") BigDecimal valorAnual,
             @Value("${spring.profiles.active:}") String perfisAtivos) {
-        if (ehProducao(perfisAtivos) && (webhookSegredo == null || webhookSegredo.isBlank())) {
-            throw new IllegalStateException(
-                    "O segredo do webhook do Asaas (ASAAS_WEBHOOK_SEGREDO) e obrigatorio em producao.");
-        }
         this.url = url;
         this.apiKey = apiKey;
-        this.webhookSegredo = webhookSegredo;
+        this.webhookToken = webhookToken;
         this.valorMensal = valorMensal;
         this.valorAnual = valorAnual;
+        if (ehProducao(perfisAtivos) && configurado()) {
+            validarTokenWebhook();
+        }
+    }
+
+    private void validarTokenWebhook() {
+        if (webhookToken == null || webhookToken.isBlank()) {
+            throw new IllegalStateException(
+                    "O token do webhook do Asaas (ASAAS_WEBHOOK_TOKEN) e obrigatorio em producao.");
+        }
+        int tamanho = webhookToken.length();
+        if (tamanho < TAMANHO_MINIMO_TOKEN_WEBHOOK || tamanho > TAMANHO_MAXIMO_TOKEN_WEBHOOK) {
+            throw new IllegalStateException(
+                    "O token do webhook do Asaas (ASAAS_WEBHOOK_TOKEN) deve ter entre "
+                            + TAMANHO_MINIMO_TOKEN_WEBHOOK + " e " + TAMANHO_MAXIMO_TOKEN_WEBHOOK + " caracteres.");
+        }
     }
 
     private boolean ehProducao(String perfisAtivos) {
@@ -45,8 +61,8 @@ public class AsaasPropriedades {
         return apiKey;
     }
 
-    public String getWebhookSegredo() {
-        return webhookSegredo;
+    public String getWebhookToken() {
+        return webhookToken;
     }
 
     public BigDecimal getValorMensal() {

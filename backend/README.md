@@ -15,7 +15,7 @@ API REST do **Serviço Já**, plataforma que conecta clientes a empresas de serv
 
 ## Requisitos
 
-- JDK 21
+- JDK 21 ou superior
 - Maven 3.9+ (ou use o wrapper `./mvnw`, que não exige Maven instalado)
 - PostgreSQL 17+ (com um banco chamado `servico_ja` criado)
 
@@ -55,6 +55,8 @@ então sobrevivem a `docker compose down` (mas não a `docker compose down -v`).
    - OpenAPI JSON: http://localhost:8080/v3/api-docs
    - Health check: http://localhost:8080/actuator/health
 
+   O Swagger e o OpenAPI ficam desligados com `SPRING_PROFILES_ACTIVE=prod`.
+
 ## Configuração (variáveis de ambiente)
 
 | Variável | Padrão | Descrição |
@@ -65,33 +67,36 @@ então sobrevivem a `docker compose down` (mas não a `docker compose down -v`).
 | `JWT_SECRET` | valor de desenvolvimento | Segredo para assinar os JWT (mín. 32 bytes) |
 | `JWT_EXPIRACAO_ACESSO_MIN` | `60` | Validade do token de acesso em minutos |
 | `JWT_EXPIRACAO_REFRESH_DIAS` | `30` | Validade do refresh token em dias |
-| `ASAAS_URL` | `https://sandbox.asaas.com` | URL da API do Asaas |
-| `ASAAS_API_KEY` | vazio | Chave de API do Asaas |
-| `ASAAS_WEBHOOK_SEGREDO` | vazio | Segredo para validar o webhook do Asaas |
+| `ASAAS_URL` | `https://api-sandbox.asaas.com` | URL da API do Asaas (sem `/v3`). Produção: `https://api.asaas.com` |
+| `ASAAS_API_KEY` | vazio | Chave de API do Asaas (vazia = pagamentos desativados) |
+| `ASAAS_WEBHOOK_TOKEN` | vazio | Token de autenticação do webhook, o mesmo cadastrado no painel do Asaas (32 a 255 caracteres). Obrigatório em `prod` quando `ASAAS_API_KEY` está definida |
 | `ASAAS_VALOR_MENSAL` | `49.90` | Valor mensal da assinatura Premium |
 | `ASAAS_VALOR_ANUAL` | `479.00` | Valor anual da assinatura Premium |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_USER` / `MAIL_PASSWORD` | Gmail SMTP | Envio de e-mails |
-| `APP_BASE_URL` | `http://localhost:8080` | URL base usada nos links de e-mail e nas URLs de fotos/logo enviados |
+| `APP_BASE_URL` | `http://localhost:8080` | URL pública da API, usada para montar as URLs das fotos/logo enviados |
 | `CIDADE_PADRAO` | `Marau` | Cidade padrão dos novos usuários |
 | `UF_PADRAO` | `RS` | UF padrão dos novos usuários |
 | `PORT` | `8080` | Porta do servidor |
 | `UPLOAD_DIR` | `./uploads` | Diretório onde fotos/logo enviados pelos usuários são gravados |
-| `CORS_ALLOWED_ORIGINS` | `*` | Origens permitidas por CORS, separadas por vírgula. **Em produção, restrinja** aos domínios reais (ex.: `https://app.servicoja.com.br`) |
-| `ADMIN_SEED_EMAIL` | `admin@servicoja.com.br` | E-mail do administrador criado automaticamente (perfil `!prod`) |
-| `ADMIN_SEED_SENHA` | *(gerada automaticamente)* | Senha do administrador seed. Se não for definida, uma senha aleatória é gerada e impressa no log na primeira inicialização |
+| `CORS_ALLOWED_ORIGINS` | `*` (vazio em `prod`) | Origens web permitidas por CORS, separadas por vírgula. O app mobile não precisa de CORS; em produção só defina se houver um cliente web (ex.: `https://admin.servicoja.com.br`) |
+| `ADMIN_SEED_EMAIL` | `admin@servicoja.com.br` | E-mail do administrador inicial |
+| `ADMIN_SEED_SENHA` | vazio | Senha do administrador inicial. Obrigatória em `prod` (mín. 12 caracteres); fora de `prod`, se vazia, uma senha aleatória é gerada e exibida no log |
 
-## Usuário administrador (seed)
+## Dados iniciais
 
-Ao iniciar (fora do profile `prod`), a aplicação cria automaticamente um administrador e
-categorias iniciais. Por padrão o e-mail é `admin@servicoja.com.br`; se `ADMIN_SEED_SENHA`
-não for definida, uma senha aleatória é gerada e aparece uma única vez no log, assim:
+- **Categorias**: criadas pela migração `V3__categorias_iniciais.sql`, em qualquer ambiente.
+- **Administrador**: criado na subida da aplicação enquanto não existir nenhum usuário `ADMIN`.
+  - Em `prod`, a senha precisa vir de `ADMIN_SEED_SENHA` (mínimo 12 caracteres) e nunca é
+    gerada nem escrita no log. Sem ela, a aplicação sobe normalmente, mas avisa no log que
+    nenhum administrador foi criado. Depois do primeiro login, troque a senha pelo app e
+    remova `ADMIN_SEED_SENHA` do ambiente.
+  - Fora de `prod`, se `ADMIN_SEED_SENHA` não for definida, uma senha aleatória é gerada e
+    aparece uma única vez no log:
 
-```
-Administrador padrao criado (admin@servicoja.com.br) com senha gerada automaticamente: xxxxxxxxxxxxxxxx
-```
-
-Copie essa senha dali e troque-a depois do primeiro login (ou defina `ADMIN_SEED_SENHA`
-com o valor que preferir antes de o admin ser criado pela primeira vez).
+    ```
+    Administrador inicial criado (admin@servicoja.com.br) com senha gerada automaticamente: xxxxxxxxxxxxxxxx
+    ```
+- **Empresas de exemplo** (senha `senha123`): criadas apenas fora de `prod`.
 
 ## Endpoints principais
 
@@ -108,6 +113,7 @@ com o valor que preferir antes de o admin ser criado pela primeira vez).
 | PUT | `/api/auth/senha` | Altera a própria senha |
 | PUT | `/api/auth/perfil` | Atualiza dados do usuário logado |
 | GET | `/api/auth/me` | Dados do usuário logado |
+| POST | `/api/auth/excluir-conta` | Exclui a própria conta (exige a senha atual; indisponível para `ADMIN`) |
 
 ### Categorias (`/api/categorias`)
 | Método | Rota | Descrição |
@@ -126,8 +132,8 @@ com o valor que preferir antes de o admin ser criado pela primeira vez).
 | GET | `/api/empresas/{id}` | Perfil público da empresa |
 | GET | `/api/empresas/minhas` | Empresas do usuário logado |
 | POST | `/api/empresas` | Cadastra empresa (dono) |
-| PUT | `/api/empresas/{id}` | Atualiza empresa (dono) |
-| DELETE | `/api/empresas/{id}` | Remove empresa (dono) |
+| PUT | `/api/empresas/{id}` | Atualiza empresa (dono). O logo não faz parte deste corpo |
+| DELETE | `/api/empresas/{id}` | Exclui empresa (dono): cancela o Premium no Asaas e tira a empresa da plataforma |
 | POST | `/api/empresas/{id}/fotos` | Envia uma foto (multipart/form-data, exige Premium) |
 | DELETE | `/api/empresas/{id}/fotos/{fotoId}` | Remove foto do portfolio |
 | POST | `/api/empresas/{id}/logo` | Envia o logo da empresa (multipart/form-data) |
@@ -186,7 +192,10 @@ com o valor que preferir antes de o admin ser criado pela primeira vez).
 
 `POST /api/empresas/{id}/fotos` e `POST /api/empresas/{id}/logo` recebem
 `multipart/form-data` com um campo `arquivo` (imagem JPG/PNG/WEBP, até 5MB); o endpoint
-de fotos aceita ainda `descricao` e `ordem` como campos de texto adicionais.
+de fotos aceita ainda `descricao` e `ordem` como campos de texto adicionais. O formato é
+identificado pelo conteúdo do arquivo (assinatura binária), não pelo nome nem pelo
+`Content-Type` enviados, e o arquivo é salvo com um nome aleatório. O logo só pode ser
+alterado por esse upload.
 
 Os arquivos são gravados em disco, em `${UPLOAD_DIR}/empresas/{id}/fotos|logo/`, e
 servidos publicamente em `/uploads/**`. A gravação em disco é uma implementação da
@@ -199,10 +208,12 @@ ganhar uma implementação baseada em object storage).
 ## Segurança
 
 - Endpoints públicos: login, registro, listagem de categorias/empresas/avaliações, webhook do Asaas, recuperação de senha e arquivos em `/uploads/**`.
-- Demais endpoints exigem token JWT via header `Authorization: Bearer <token>`.
-- Ações de administração exigem o perfil `ADMIN`.
-- Há um limitador de requisições para evitar abuso em login e registro.
-- CORS é restrito pela lista configurada em `CORS_ALLOWED_ORIGINS` (padrão `*`, adequado só para desenvolvimento).
+- Demais endpoints exigem token JWT via header `Authorization: Bearer <token>`. Contas desativadas ou excluídas perdem o acesso na hora, mesmo com um token ainda válido.
+- Ações de administração (`/api/admin/**` e toda escrita em `/api/categorias`) exigem o perfil `ADMIN`.
+- O webhook do Asaas só é processado se o header `asaas-access-token` for igual a `ASAAS_WEBHOOK_TOKEN` (comparação em tempo constante).
+- Há um limitador de requisições por IP para login, registro, recuperação de senha e exclusão de conta. Atrás de proxy/load balancer, o IP real vem de `X-Forwarded-For` (`server.forward-headers-strategy=native`), aceito apenas quando a conexão chega de um proxy da rede interna.
+- CORS: `CORS_ALLOWED_ORIGINS` (padrão `*` fora de `prod`; em `prod`, nenhuma origem por padrão). A API não usa cookies (`allowCredentials=false`).
+- Exclusão de conta (LGPD): apaga favoritos, avaliações, notificações e tokens, remove as empresas do usuário (com cancelamento do Premium) e anonimiza o cadastro. Assinaturas, pagamentos e logs de acesso são mantidos por obrigação legal, sem dados pessoais.
 - `/actuator/health` é o único endpoint do Actuator exposto (`management.endpoints.web.exposure.include=health`), sem detalhes sensíveis (`show-details: never`).
 
 ## Testes
@@ -246,16 +257,22 @@ serviço) e valida o build da imagem Docker a cada push/PR que toque em `backend
 
 ## Checklist antes de ir para produção
 
-- [ ] `SPRING_PROFILES_ACTIVE=prod` (ativa a validação de um `JWT_SECRET` forte e
-      desativa o seed de administrador/categorias/empresas de exemplo)
-- [ ] `JWT_SECRET` forte e único (ex.: `openssl rand -base64 48`) — a aplicação recusa
+- [ ] `SPRING_PROFILES_ACTIVE=prod` (exige um `JWT_SECRET` forte, desliga o Swagger e
+      as empresas de exemplo, e fecha o CORS)
+- [ ] `JWT_SECRET` forte e único (ex.: `openssl rand -base64 48`). A aplicação recusa
       subir em `prod` com o valor de desenvolvimento
-- [ ] `CORS_ALLOWED_ORIGINS` restrito aos domínios reais do app/admin
-- [ ] `DB_URL`/`DB_USER`/`DB_PASSWORD` apontando para o Postgres de produção
-- [ ] `ASAAS_URL`/`ASAAS_API_KEY`/`ASAAS_WEBHOOK_SEGREDO` de produção (não sandbox)
+- [ ] `ADMIN_SEED_EMAIL`/`ADMIN_SEED_SENHA` (mín. 12 caracteres) para criar o primeiro
+      administrador; depois do primeiro login, troque a senha e remova a variável
+- [ ] `DB_URL`/`DB_USER`/`DB_PASSWORD` apontando para o Postgres de produção, com senha
+      forte e sem porta exposta para a internet
+- [ ] `ASAAS_URL=https://api.asaas.com`, `ASAAS_API_KEY` de produção e
+      `ASAAS_WEBHOOK_TOKEN` (ex.: `openssl rand -hex 32`), cadastrando o mesmo token no
+      webhook do painel do Asaas apontando para `https://<sua-api>/api/asaas/webhook`
+- [ ] `APP_BASE_URL` com a URL pública (HTTPS) da API
 - [ ] `MAIL_*` configurado com uma conta/serviço SMTP real
 - [ ] `UPLOAD_DIR` apontando para um volume persistente (backup incluído)
 - [ ] HTTPS/domínio configurados na camada de proxy/load balancer na frente da API
+- [ ] Backup automático do Postgres
 
 ## Estrutura do projeto
 
@@ -273,6 +290,7 @@ backend/
     │   │   └── ServicoJaApiApplication.java
     │   └── resources
     │       ├── application.yml
+    │       ├── application-prod.yml # Ajustes aplicados só em produção
     │       └── db/migration/ # Migrações Flyway
     └── test                  # Testes de integração
 ```

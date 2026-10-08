@@ -10,4 +10,6 @@ public interface TokenRecuperacaoRepository extends JpaRepository<TokenRecuperac
     Optional<TokenRecuperacao> findFirstByTokenAndUsadoFalse(String token);
 
     List<TokenRecuperacao> findAllByUsuarioIdAndUsadoFalse(Long usuarioId);
+
+    void deleteByUsuarioId(Long usuarioId);
 }

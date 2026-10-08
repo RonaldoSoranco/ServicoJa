@@ -5,75 +5,64 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.util.HexFormat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * Testa a verificacao de assinatura HMAC do webhook do Asaas sem subir o contexto Spring
- * (evita depender da API externa do Asaas para validar apenas a regra de seguranca do endpoint).
+ * Testa a autenticacao do webhook do Asaas (token fixo no cabecalho asaas-access-token) sem subir
+ * o contexto Spring, para validar apenas a regra de seguranca do endpoint.
  */
 class AsaasWebhookControllerTest {
 
-    private static final String SEGREDO = "segredo-teste-webhook";
+    private static final String TOKEN = "token-de-teste-do-webhook-com-mais-de-32-caracteres";
+    private static final String CORPO = "{\"event\":\"PAYMENT_CONFIRMED\"}";
 
     private final AssinaturaService assinaturaService = mock(AssinaturaService.class);
-    private final AsaasPropriedades propriedades = new AsaasPropriedades(
-            "https://sandbox.asaas.com", "", SEGREDO, BigDecimal.TEN, BigDecimal.TEN, "");
-    private final AsaasWebhookController controller = new AsaasWebhookController(assinaturaService, propriedades);
 
     @Test
-    void aceitaEProcessaQuandoAssinaturaEValida() {
-        String corpo = "{\"event\":\"PAYMENT_CONFIRMED\"}";
-        String assinatura = "sha256=" + calcularHmac(SEGREDO, corpo);
-
-        var resposta = controller.webhook(corpo, assinatura);
+    void aceitaEProcessaQuandoTokenConfere() {
+        var resposta = controllerComToken(TOKEN).webhook(CORPO, TOKEN);
 
         assertThat(resposta.getStatusCode().value()).isEqualTo(200);
-        verify(assinaturaService).processarWebhook(corpo);
+        verify(assinaturaService).processarWebhook(CORPO);
     }
 
     @Test
-    void rejeitaQuandoAssinaturaEstaAusente() {
-        ResponseStatusException ex =
-                catchThrowableOfType(() -> controller.webhook("{}", null), ResponseStatusException.class);
+    void rejeitaQuandoTokenEstaAusente() {
+        ResponseStatusException ex = catchThrowableOfType(ResponseStatusException.class,
+                () -> controllerComToken(TOKEN).webhook(CORPO, null));
 
         assertThat(ex.getStatusCode().value()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(assinaturaService, never()).processarWebhook(anyString());
     }
 
     @Test
-    void rejeitaQuandoAssinaturaEstaIncorreta() {
-        ResponseStatusException ex = catchThrowableOfType(
-                () -> controller.webhook("{}", "sha256=" + "0".repeat(64)), ResponseStatusException.class);
+    void rejeitaQuandoTokenEstaIncorreto() {
+        ResponseStatusException ex = catchThrowableOfType(ResponseStatusException.class,
+                () -> controllerComToken(TOKEN).webhook(CORPO, TOKEN + "x"));
 
         assertThat(ex.getStatusCode().value()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(assinaturaService, never()).processarWebhook(anyString());
     }
 
     @Test
-    void rejeitaQuandoCorpoFoiAlteradoAposAAssinatura() {
-        String assinatura = "sha256=" + calcularHmac(SEGREDO, "{\"event\":\"PAYMENT_CONFIRMED\"}");
+    void recusaTudoQuandoTokenNaoEstaConfigurado() {
+        ResponseStatusException ex = catchThrowableOfType(ResponseStatusException.class,
+                () -> controllerComToken("").webhook(CORPO, ""));
 
-        ResponseStatusException ex = catchThrowableOfType(
-                () -> controller.webhook("{\"event\":\"PAYMENT_REFUNDED\"}", assinatura),
-                ResponseStatusException.class);
-
-        assertThat(ex.getStatusCode().value()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(ex.getStatusCode().value()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.value());
+        verify(assinaturaService, never()).processarWebhook(anyString());
     }
 
-    private String calcularHmac(String segredo, String corpo) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(segredo.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            return HexFormat.of().formatHex(mac.doFinal(corpo.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    private AsaasWebhookController controllerComToken(String tokenConfigurado) {
+        AsaasPropriedades propriedades = new AsaasPropriedades(
+                "https://api-sandbox.asaas.com", "", tokenConfigurado, BigDecimal.TEN, BigDecimal.TEN, "");
+        return new AsaasWebhookController(assinaturaService, propriedades);
     }
 }

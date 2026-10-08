@@ -101,6 +101,9 @@ public class Empresa {
     @Column(name = "total_avaliacoes", nullable = false)
     private Integer totalAvaliacoes = 0;
 
+    @Column(name = "excluida_em")
+    private OffsetDateTime excluidaEm;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
 
@@ -121,5 +124,34 @@ public class Empresa {
 
     public boolean isPerfilCompleto() {
         return Boolean.TRUE.equals(premiumAtivo);
+    }
+
+    /**
+     * Tira a empresa da plataforma. O registro e mantido (sem os dados de contato) porque
+     * assinaturas e pagamentos continuam referenciando-o como historico financeiro.
+     */
+    public void marcarComoExcluida() {
+        excluidaEm = OffsetDateTime.now();
+        aprovada = false;
+        destaque = false;
+        premiumAtivo = false;
+        premiumAte = null;
+        logoUrl = null;
+        descricaoCurta = null;
+        descricaoCompleta = null;
+        telefone = null;
+        whatsapp = null;
+        emailContato = null;
+        cep = null;
+        endereco = null;
+        numero = null;
+        bairro = null;
+        latitude = null;
+        longitude = null;
+        horarioFuncionamento = null;
+        redesSociais = null;
+        site = null;
+        mediaAvaliacoes = BigDecimal.ZERO;
+        totalAvaliacoes = 0;
     }
 }

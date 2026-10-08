@@ -73,7 +73,7 @@ public class SegurancaConfig {
                         .requestMatchers("/api/auth/**").authenticated()
                         .requestMatchers("/api/asaas/webhook").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categorias").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/categorias/todas").hasRole("ADMIN")
+                        .requestMatchers("/api/categorias", "/api/categorias/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/empresas/minhas").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/empresas", "/api/empresas/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/avaliacoes/empresas/*").permitAll()
@@ -96,7 +96,8 @@ public class SegurancaConfig {
         configuracao.setAllowedOriginPatterns(origensCorsPermitidas);
         configuracao.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuracao.setAllowedHeaders(List.of("*"));
-        configuracao.setAllowCredentials(true);
+        // A autenticacao e feita por token no cabecalho Authorization, nunca por cookie.
+        configuracao.setAllowCredentials(false);
         UrlBasedCorsConfigurationSource fonte = new UrlBasedCorsConfigurationSource();
         fonte.registerCorsConfiguration("/**", configuracao);
         return fonte;

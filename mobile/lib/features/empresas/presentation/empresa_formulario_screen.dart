@@ -33,7 +33,6 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
   late final TextEditingController _nomeController;
   late final TextEditingController _descricaoCurtaController;
   late final TextEditingController _descricaoCompletaController;
-  late final TextEditingController _logoUrlController;
   late final TextEditingController _telefoneController;
   late final TextEditingController _whatsappController;
   late final TextEditingController _emailContatoController;
@@ -65,7 +64,6 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
     _nomeController = TextEditingController(text: e?.nome ?? '');
     _descricaoCurtaController = TextEditingController(text: e?.descricaoCurta ?? '');
     _descricaoCompletaController = TextEditingController(text: e?.descricaoCompleta ?? '');
-    _logoUrlController = TextEditingController(text: e?.logoUrl ?? '');
     _telefoneController = TextEditingController(text: e?.telefone ?? '');
     _whatsappController = TextEditingController(text: e?.whatsapp ?? '');
     _emailContatoController = TextEditingController(text: e?.emailContato ?? '');
@@ -87,7 +85,6 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
     _nomeController.dispose();
     _descricaoCurtaController.dispose();
     _descricaoCompletaController.dispose();
-    _logoUrlController.dispose();
     _telefoneController.dispose();
     _whatsappController.dispose();
     _emailContatoController.dispose();
@@ -146,7 +143,6 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
       categoriaId: _categoriaId!,
       descricaoCurta: _descricaoCurtaController.text.trim(),
       descricaoCompleta: _descricaoCompletaController.text.trim(),
-      logoUrl: _logoUrlController.text.trim(),
       telefone: _telefoneController.text.trim(),
       whatsapp: _whatsappController.text.trim(),
       emailContato: _emailContatoController.text.trim(),
@@ -203,11 +199,7 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
     try {
       final bytes = await arquivo.readAsBytes();
       final atualizada = await _repositorio.enviarLogo(_empresaAtual!.id, bytes: bytes, nomeArquivo: arquivo.name);
-      if (mounted) {
-        setState(() => _empresaAtual = atualizada);
-        // Mantem o campo de texto sincronizado, pois e ele que e enviado ao salvar o formulario.
-        _logoUrlController.text = atualizada.logoUrl ?? '';
-      }
+      if (mounted) setState(() => _empresaAtual = atualizada);
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
@@ -319,23 +311,12 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
                       maxLines: 4,
                       decoration: const InputDecoration(labelText: 'Descricao completa', alignLabelWithHint: true),
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _logoUrlController,
-                      decoration: InputDecoration(
-                        labelText: 'URL do logo (opcional)',
-                        helperText: _editando ? 'Ou envie uma imagem diretamente pelo botao ao lado.' : null,
-                        suffixIcon: _editando
-                            ? IconButton(
-                                icon: _enviandoLogo
-                                    ? const SizedBox(
-                                        height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                    : const Icon(Icons.upload_outlined),
-                                tooltip: 'Enviar imagem do logo',
-                                onPressed: _enviandoLogo ? null : _enviarLogo,
-                              )
-                            : null,
-                      ),
+                    const SizedBox(height: 16),
+                    _CampoLogo(
+                      logoUrl: _empresaAtual?.logoUrl,
+                      habilitado: _editando,
+                      enviando: _enviandoLogo,
+                      aoEnviar: _enviarLogo,
                     ),
                     _tituloSecao('Contato'),
                     TextFormField(
@@ -497,6 +478,69 @@ class _EmpresaFormularioScreenState extends State<EmpresaFormularioScreen> {
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 12),
       child: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+    );
+  }
+}
+
+/// Logo da empresa: so pode ser trocado pelo upload da imagem, que fica disponivel
+/// depois que a empresa e cadastrada (o arquivo e gravado na pasta da empresa).
+class _CampoLogo extends StatelessWidget {
+  const _CampoLogo({
+    required this.logoUrl,
+    required this.habilitado,
+    required this.enviando,
+    required this.aoEnviar,
+  });
+
+  final String? logoUrl;
+  final bool habilitado;
+  final bool enviando;
+  final VoidCallback aoEnviar;
+
+  bool get _temLogo => logoUrl != null && logoUrl!.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!habilitado) {
+      return const Text(
+        'Voce podera enviar o logo depois de cadastrar a empresa.',
+        style: TextStyle(color: Colors.black54),
+      );
+    }
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: _temLogo
+              ? Image.network(
+                  logoUrl!,
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stack) => _semLogo(Icons.broken_image_outlined),
+                )
+              : _semLogo(Icons.storefront_outlined),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: enviando ? null : aoEnviar,
+            icon: enviando
+                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.upload_outlined),
+            label: Text(_temLogo ? 'Trocar logo' : 'Enviar logo'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _semLogo(IconData icone) {
+    return Container(
+      width: 64,
+      height: 64,
+      color: Colors.grey.shade100,
+      child: Icon(icone, color: Colors.black26),
     );
   }
 }

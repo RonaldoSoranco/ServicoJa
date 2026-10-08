@@ -61,6 +61,10 @@ public final class AuthDtos {
             @Size(min = 8, max = 72, message = "A senha deve ter entre 8 e 72 caracteres.") String novaSenha) {
     }
 
+    public record ExcluirContaRequest(
+            @NotBlank(message = "Informe sua senha para confirmar a exclusao.") @Size(max = 72) String senha) {
+    }
+
     public record AtualizarPerfilRequest(
             @NotBlank(message = "Informe o nome.") @Size(max = 120) String nome,
             @Size(max = 20) @Pattern(regexp = "^$|^[0-9+()\\s-]*$", message = "Telefone invalido.") String telefone) {

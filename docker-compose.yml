@@ -13,7 +13,9 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "5432:5432"
+      # So acessivel pela propria maquina: o Docker ignora o firewall do host (ufw) ao publicar
+      # portas, e expor o Postgres para a internet e um risco desnecessario.
+      - "127.0.0.1:5432:5432"
 
   backend:
     build: ./backend
@@ -28,9 +30,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-segredo-servico-ja-troque-em-producao-32-bytes-min}
       JWT_EXPIRACAO_ACESSO_MIN: ${JWT_EXPIRACAO_ACESSO_MIN:-60}
       JWT_EXPIRACAO_REFRESH_DIAS: ${JWT_EXPIRACAO_REFRESH_DIAS:-30}
-      ASAAS_URL: ${ASAAS_URL:-https://sandbox.asaas.com}
+      ASAAS_URL: ${ASAAS_URL:-https://api-sandbox.asaas.com}
       ASAAS_API_KEY: ${ASAAS_API_KEY:-}
-      ASAAS_WEBHOOK_SEGREDO: ${ASAAS_WEBHOOK_SEGREDO:-}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
       ASAAS_VALOR_MENSAL: ${ASAAS_VALOR_MENSAL:-49.90}
       ASAAS_VALOR_ANUAL: ${ASAAS_VALOR_ANUAL:-479.00}
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}

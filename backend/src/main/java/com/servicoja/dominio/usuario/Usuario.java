@@ -46,6 +46,9 @@ public class Usuario {
     @Column(nullable = false)
     private Boolean ativo = true;
 
+    @Column(name = "excluido_em")
+    private OffsetDateTime excluidoEm;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
 
@@ -65,5 +68,21 @@ public class Usuario {
     @PreUpdate
     public void preUpdate() {
         atualizadoEm = OffsetDateTime.now();
+    }
+
+    /**
+     * Remove os dados pessoais da conta excluida. O registro continua existindo apenas como
+     * referencia do historico financeiro, e o e-mail original fica livre para um novo cadastro.
+     *
+     * @param senhaInutilizavel hash de uma senha aleatoria descartada, para que ninguem consiga entrar
+     */
+    public void anonimizar(String senhaInutilizavel) {
+        nome = "Conta excluida";
+        email = "excluido-" + id + "@servicoja.invalid";
+        senha = senhaInutilizavel;
+        telefone = null;
+        cpf = null;
+        ativo = false;
+        excluidoEm = OffsetDateTime.now();
     }
 }

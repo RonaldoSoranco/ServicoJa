@@ -103,6 +103,12 @@ class AuthRepository {
     return json['mensagem'] as String? ?? 'Senha redefinida com sucesso.';
   }
 
+  /// Exclui a conta do usuario logado (exige a senha atual) e encerra a sessao local.
+  Future<void> excluirConta({required String senha}) async {
+    await _apiClient.post('/api/auth/excluir-conta', autenticado: true, corpo: {'senha': senha});
+    await _tokenStorage.limpar();
+  }
+
   Future<void> logout() async {
     final tokenRefresh = await _tokenStorage.lerTokenRefresh();
     try {

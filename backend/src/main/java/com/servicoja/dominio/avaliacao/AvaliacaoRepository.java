@@ -29,4 +29,6 @@ public interface AvaliacaoRepository extends JpaRepository<Avaliacao, Long> {
     Double mediaNotaPorEmpresa(@Param("empresaId") Long empresaId);
 
     long countByEmpresaIdAndStatus(Long empresaId, StatusAvaliacao status);
+
+    void deleteByEmpresaId(Long empresaId);
 }

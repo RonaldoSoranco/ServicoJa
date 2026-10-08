@@ -7,4 +7,6 @@ import java.util.List;
 public interface PortfolioRepository extends JpaRepository<Portfolio, Long> {
 
     List<Portfolio> findByEmpresaIdOrderByCriadoEmDesc(Long empresaId);
+
+    void deleteByEmpresaId(Long empresaId);
 }

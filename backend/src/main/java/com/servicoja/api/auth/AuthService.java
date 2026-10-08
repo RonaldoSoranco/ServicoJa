@@ -47,7 +47,6 @@ public class AuthService {
     private final EmailService emailService;
     private final LimitadorRequisicoes limitador;
     private final UsuarioAtual usuarioAtual;
-    private final String baseUrl;
     private final String cidadePadrao;
     private final String ufPadrao;
 
@@ -62,7 +61,6 @@ public class AuthService {
             EmailService emailService,
             LimitadorRequisicoes limitador,
             UsuarioAtual usuarioAtual,
-            @Value("${servico-ja.app.base-url}") String baseUrl,
             @Value("${servico-ja.app.cidade-padrao}") String cidadePadrao,
             @Value("${servico-ja.app.uf-padrao}") String ufPadrao) {
         this.usuarioRepository = usuarioRepository;
@@ -75,7 +73,6 @@ public class AuthService {
         this.emailService = emailService;
         this.limitador = limitador;
         this.usuarioAtual = usuarioAtual;
-        this.baseUrl = baseUrl;
         this.cidadePadrao = cidadePadrao;
         this.ufPadrao = ufPadrao;
     }
@@ -200,18 +197,20 @@ public class AuthService {
         }
 
         usuarioRepository.findByEmailIgnoreCase(requisicao.email().trim())
+                .filter(usuario -> Boolean.TRUE.equals(usuario.getAtivo()))
                 .ifPresent(usuario -> {
                     String token = UUID.randomUUID().toString().replace("-", "") + gerarSufixoAleatorio();
                     revogarTokensRecuperacaoPendentes(usuario);
                     TokenRecuperacao registro = new TokenRecuperacao(usuario, TokenHash.de(token), OffsetDateTime.now().plusHours(2));
                     tokenRecuperacaoRepository.save(registro);
-                    String link = baseUrl + "/api/auth/redefinir-senha?token=" + token;
                     emailService.enviar(
                             usuario.getEmail(),
                             "Recuperacao de senha - Servico Ja",
-                            "Para redefinir sua senha, utilize o token: " + token
-                                    + "\n\nLink: " + link
-                                    + "\n\nO token expira em 2 horas.");
+                            "Recebemos um pedido para redefinir a sua senha.\n\n"
+                                    + "Abra o app Servico Ja, toque em \"Esqueci minha senha\" e depois em "
+                                    + "\"Ja tenho um token, quero redefinir a senha\". Informe o token abaixo:\n\n"
+                                    + token
+                                    + "\n\nO token expira em 2 horas. Se voce nao fez esse pedido, ignore este e-mail.");
                 });
     }
 

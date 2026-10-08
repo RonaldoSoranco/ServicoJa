@@ -7,18 +7,24 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * Empresas excluidas continuam no banco apenas como historico financeiro; por isso as consultas
+ * da aplicacao usam as variantes que ignoram registros com {@code excluidaEm} preenchido.
+ */
 public interface EmpresaRepository extends JpaRepository<Empresa, Long> {
 
-    List<Empresa> findByUsuarioId(Long usuarioId);
+    Optional<Empresa> findByIdAndExcluidaEmIsNull(Long id);
 
-    boolean existsByUsuarioId(Long usuarioId);
+    List<Empresa> findByUsuarioIdAndExcluidaEmIsNull(Long usuarioId);
 
     boolean existsByCategoriaId(Long categoriaId);
 
     @Query("""
             SELECT e FROM Empresa e
             WHERE e.aprovada = true
+              AND e.excluidaEm IS NULL
               AND (:categoriaId IS NULL OR e.categoria.id = :categoriaId)
               AND (cast(:nome as string) IS NULL
                    OR lower(e.nome) LIKE lower(concat('%', cast(:nome as string), '%')))
@@ -35,7 +41,8 @@ public interface EmpresaRepository extends JpaRepository<Empresa, Long> {
 
     @Query("""
             SELECT e FROM Empresa e
-            WHERE (:categoriaId IS NULL OR e.categoria.id = :categoriaId)
+            WHERE e.excluidaEm IS NULL
+              AND (:categoriaId IS NULL OR e.categoria.id = :categoriaId)
               AND (cast(:nome as string) IS NULL
                    OR lower(e.nome) LIKE lower(concat('%', cast(:nome as string), '%')))
               AND (cast(:cidade as string) IS NULL OR lower(e.cidade) = lower(cast(:cidade as string)))
@@ -49,7 +56,9 @@ public interface EmpresaRepository extends JpaRepository<Empresa, Long> {
             @Param("uf") String uf,
             Pageable pageable);
 
+    long countByExcluidaEmIsNull();
+
     long countByPremiumAtivoTrue();
 
-    long countByAprovadaFalse();
+    long countByAprovadaFalseAndExcluidaEmIsNull();
 }
